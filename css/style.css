@@ -1,0 +1,34 @@
+/* This file will hold main layout, typography, and core styles. */
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+.form-input:focus, .form-text:focus, .form-select:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.4);
+    border-color: #60A5FA;
+}
+
+.winner-reveal {
+    transition: all 0.5s ease-in-out;
+}
+
+.title-trigger {
+    cursor: pointer;
+    display: inline-block;
+    transition: transform 0.2s;
+}
+
+.title-trigger:hover {
+    transform: scale(1.1);
+    color: #FBBF24; /* amber-400 */
+}
+
+.flip-horizontal { 
+    transform: scaleX(-1); 
+}
+
+#setup-panel {
+    max-height: 90vh;
+}
+

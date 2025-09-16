@@ -1,0 +1,409 @@
+<!-- All modal HTML has been moved here from index.html -->
+
+<!-- Initial Steam Universe Setup Modal -->
+<div id="universe-setup-modal" class="hidden fixed inset-0 bg-black bg-opacity-85 flex items-center justify-center z-[100] p-4">
+    <div class="bg-gray-800 p-8 rounded-2xl w-full max-w-lg text-center shadow-2xl border-2 border-amber-400">
+        <h2 class="text-3xl font-bold text-amber-400 mb-4">Create Your Boxing Universe</h2>
+        <p class="text-gray-300 mb-2">Start by populating your universe. Add Steam App IDs one by one, or paste a comma-separated list below.</p>
+        <p class="text-gray-400 text-sm mb-4">You need at least 6 fighters to create a universe.</p>
+        <div class="flex gap-2 mb-2">
+            <input type="text" id="single-steam-id-input" class="form-input w-full bg-gray-900 border-gray-600 rounded-md py-2 px-3 text-white" placeholder="Add one Steam App ID">
+            <button id="add-single-steam-id-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Add</button>
+        </div>
+        <textarea id="steam-ids-input" rows="3" class="form-input w-full bg-gray-900 border-gray-600 rounded-md py-2 px-3 text-white mb-2" placeholder="e.g., 730, 570, 271590, 1091500, 1086940, 1174180"></textarea>
+        <p id="universe-setup-error" class="text-red-500 text-sm h-5 mb-4"></p>
+        <div class="flex justify-center gap-4 flex-wrap">
+            <button id="import-universe-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg">Import Universe</button>
+            <button id="load-preset-universe-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Load Preset</button>
+            <button id="select-top-100-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">Select from Top 100</button>
+            <button id="start-universe-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Create Universe</button>
+        </div>
+    </div>
+</div>
+
+<!-- Top 100 Selection Modal -->
+<div id="top-100-modal" class="hidden fixed inset-0 bg-black bg-opacity-85 flex items-center justify-center z-[101] p-4">
+    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl border-2 border-purple-500">
+        <h2 class="text-2xl font-bold text-purple-400 mb-4">Select Fighters from Top 100</h2>
+        <div class="flex gap-2 mb-4">
+            <input type="text" id="top-100-search" class="form-input w-full bg-gray-900 border-gray-600 rounded-md py-2 px-3 text-white" placeholder="Search fighters...">
+            <button id="top-100-clear-selection-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Clear</button>
+        </div>
+        <div id="top-100-list" class="flex-grow overflow-y-auto space-y-2 pr-2">
+            <!-- Game list will be populated here -->
+        </div>
+        <p id="top-100-status" class="text-center text-gray-400 my-4 h-6">Select at least 6 fighters.</p>
+        <div class="flex justify-center gap-4">
+            <button id="cancel-top-100-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Cancel</button>
+            <button id="confirm-top-100-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg" disabled>Create Universe</button>
+        </div>
+    </div>
+</div>
+
+<!-- Origin Lockout Modal -->
+<div id="origin-lockout-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[101] p-4">
+    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-lg text-center shadow-2xl border-2 border-red-500">
+        <h3 class="text-2xl font-bold text-red-400 mb-4">Duplicate Origin Found!</h3>
+        <p class="text-gray-300 mb-4">The universe already contains a fighter from this developer or publisher.</p>
+        <div class="text-left space-y-3 bg-gray-900 p-4 rounded-lg mb-6">
+            <p><span class="font-semibold text-gray-400">New Fighter:</span> <span id="lockout-new-fighter" class="font-bold text-white"></span></p>
+            <p><span class="font-semibold text-gray-400">Origin:</span> <span id="lockout-origin" class="font-bold text-white"></span></p>
+            <p><span class="font-semibold text-gray-400">Existing Fighter:</span> <span id="lockout-existing-fighter" class="font-bold text-white"></span></p>
+        </div>
+        <p class="text-gray-300 mb-4">Would you like to add this new fighter anyway?</p>
+        <div class="flex justify-center gap-4">
+            <button id="skip-origin-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Skip Fighter</button>
+            <button id="keep-origin-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Keep Fighter</button>
+        </div>
+    </div>
+</div>
+
+<!-- Fight Modal -->
+<div id="fight-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div class="bg-gray-800 p-8 rounded-2xl w-full max-w-4xl relative">
+         <button id="skip-intro-live-btn" class="hidden absolute bottom-4 right-4 bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg text-sm z-10">Skip Intro</button>
+        <!-- Ticker Banner -->
+        <div id="fight-ticker" class="ticker-wrap hidden">
+            <p id="ticker-text" class="ticker-text"></p>
+        </div>
+        
+         <!-- New Title Win Animation Element -->
+        <div id="fight-title-win-announcement"></div>
+
+         <div class="text-center mb-2 pt-16">
+             <p id="fight-round-counter" class="text-xl font-bold text-amber-300"></p>
+             <p id="fight-turn-counter" class="text-sm text-gray-400"></p>
+             <div id="fight-title-bout-display" class="text-center h-8 font-bold text-amber-300 text-lg title-fanfare"></div>
+         </div>
+         <div class="flex justify-between items-start mb-4 relative">
+            <div class="text-center w-2/5">
+                <p id="fighter1-title-display" class="fighter-title-display h-6 text-sm font-semibold text-amber-400"></p>
+                <p id="fighter1-name-modal" class="font-bold text-blue-400 truncate">Item 1</p>
+                <p id="fighter1-hit-bonus" class="text-xs text-green-400 h-4 font-semibold"></p>
+                <svg id="fighter1-svg" class="w-32 h-32 mx-auto" viewBox="0 0 100 100">
+                    <g class="boxer-idle">
+                        <g id="fighter1-torso" transform="translate(0, 5)">
+                            <rect x="40" y="45" width="20" height="30" fill="#004c99" rx="3"/>
+                            <rect x="38" y="42" width="24" height="10" fill="#003366" rx="3"/>
+                        </g>
+                         <g id="fighter1-left-leg">
+                            <rect x="41" y="75" width="8" height="20" fill="#002244" rx="2"/>
+                        </g>
+                        <g id="fighter1-right-leg">
+                            <rect x="51" y="75" width="8" height="20" fill="#002244" rx="2"/>
+                        </g>
+                        <g id="fighter1-left-arm" transform-origin="40 50">
+                            <path class="glove" d="M 35 48 l -5 15 l 5 15 a 8 8 0 0 1 -10 5 a 8 8 0 0 1 -5 -10 l 5 -15 z" fill="#d2b48c" stroke="#a0522d" stroke-width="1"/>
+                            <path class="glove" d="M 29 79 a 8 8 0 1 1 0 0.1 z" fill="#005cbf" />
+                        </g>
+                        <g id="fighter1-right-arm" transform-origin="60 50">
+                           <path class="glove" d="M 65 48 l 5 15 l -5 15 a 8 8 0 0 0 10 5 a 8 8 0 0 0 5 -10 l -5 -15 z" fill="#d2b48c" stroke="#a0522d" stroke-width="1"/>
+                           <path class="glove" d="M 71 79 a 8 8 0 1 1 0 0.1 z" fill="#005cbf" />
+                        </g>
+                        <g id="fighter1-head">
+                            <circle cx="50" cy="30" r="15" fill="#d2b48c"/>
+                            <rect x="40" y="20" width="20" height="5" fill="#4a2a0a" rx="2"/>
+                        </g>
+                    </g>
+                </svg>
+                <div class="w-full bg-gray-600 rounded-full h-4 mt-1"><div id="health-bar-1" class="bg-red-500 h-4 rounded-full" style="width: 100%"></div></div>
+                <p id="health-text-1" class="text-xs">100 / 100</p>
+                <div class="w-full bg-gray-600 rounded-full h-2 mt-1"><div id="stamina-bar-1" class="bg-green-500 h-2 rounded-full" style="width: 100%"></div></div>
+                <p id="stamina-text-1" class="text-xs">Stamina: 100%</p>
+                <p id="stamina-state-1" class="text-xs font-bold h-4"></p>
+            </div>
+            
+            <svg id="referee-svg" viewBox="0 0 100 100">
+                <g>
+                    <rect x="42" y="45" width="16" height="30" fill="#ffffff"/>
+                    <rect x="40" y="45" width="20" height="5" fill="#000000"/>
+                    <rect x="40" y="55" width="20" height="5" fill="#000000"/>
+                    <rect x="40" y="65" width="20" height="5" fill="#000000"/>
+                    <rect x="44" y="75" width="5" height="20" fill="#333333"/>
+                    <rect x="51" y="75" width="5" height="20" fill="#333333"/>
+                    <g id="ref-arm-left" transform-origin="42 50"><path d="M 40 50 l -10 5 l 0 10 l 10 -5 z" fill="#d2b48c"/></g>
+                    <g id="ref-arm-right" transform-origin="58 50"><path d="M 60 50 l 10 5 l 0 10 l -10 -5 z" fill="#d2b48c"/></g>
+                    <circle cx="50" cy="30" r="12" fill="#d2b48c"/>
+                    <rect x="40" y="15" width="20" height="5" fill="#111111"/>
+                     <!-- NEW: Title Icon Holder -->
+                    <text id="ref-title-icon" x="50" y="10" font-size="24" text-anchor="middle" dominant-baseline="central" fill="#FBBF24" style="display: none; filter: drop-shadow(0 0 3px black);"></text>
+                </g>
+            </svg>
+
+            <div class="text-center w-2/5">
+                <p id="fighter2-title-display" class="fighter-title-display h-6 text-sm font-semibold text-amber-400"></p>
+                <p id="fighter2-name-modal" class="font-bold text-purple-400 truncate">Item 2</p>
+                <p id="fighter2-hit-bonus" class="text-xs text-green-400 h-4 font-semibold"></p>
+                <svg id="fighter2-svg" class="w-32 h-32 mx-auto flip-horizontal" viewBox="0 0 100 100">
+                     <g class="boxer-idle">
+                        <g id="fighter2-torso" transform="translate(0, 5)">
+                            <rect x="40" y="45" width="20" height="30" fill="#3c1361" rx="3"/>
+                            <rect x="38" y="42" width="24" height="10" fill="#2a0d45" rx="3"/>
+                        </g>
+                         <g id="fighter2-left-leg">
+                            <rect x="41" y="75" width="8" height="20" fill="#2a0d45" rx="2"/>
+                        </g>
+                        <g id="fighter2-right-leg">
+                            <rect x="51" y="75" width="8" height="20" fill="#2a0d45" rx="2"/>
+                        </g>
+                        <g id="fighter2-left-arm" transform-origin="40 50">
+                            <path class="glove" d="M 35 48 l -5 15 l 5 15 a 8 8 0 0 1 -10 5 a 8 8 0 0 1 -5 -10 l 5 -15 z" fill="#d2b48c" stroke="#a0522d" stroke-width="1"/>
+                            <path class="glove" d="M 29 79 a 8 8 0 1 1 0 0.1 z" fill="#4b0082" />
+                        </g>
+                        <g id="fighter2-right-arm" transform-origin="60 50">
+                           <path class="glove" d="M 65 48 l 5 15 l -5 15 a 8 8 0 0 0 10 5 a 8 8 0 0 0 5 -10 l -5 -15 z" fill="#d2b48c" stroke="#a0522d" stroke-width="1"/>
+                           <path class="glove" d="M 71 79 a 8 8 0 1 1 0 0.1 z" fill="#4b0082" />
+                        </g>
+                        <g id="fighter2-head">
+                            <circle cx="50" cy="30" r="15" fill="#d2b48c"/>
+                            <rect x="40" y="20" width="20" height="5" fill="#4a2a0a" rx="2"/>
+                        </g>
+                    </g>
+                </svg>
+                <div class="w-full bg-gray-600 rounded-full h-4 mt-1"><div id="health-bar-2" class="bg-red-500 h-4 rounded-full" style="width: 100%"></div></div>
+                <p id="health-text-2" class="text-xs">100 / 100</p>
+                 <div class="w-full bg-gray-600 rounded-full h-2 mt-1"><div id="stamina-bar-2" class="bg-green-500 h-2 rounded-full" style="width: 100%"></div></div>
+                <p id="stamina-text-2" class="text-xs">Stamina: 100%</p>
+                <p id="stamina-state-2" class="text-xs font-bold h-4"></p>
+            </div>
+        </div>
+        <div id="box-score-container" class="my-4"></div>
+        <div id="fight-log" class="text-center h-40 overflow-y-auto bg-gray-900 rounded-lg p-2 text-sm"></div>
+         <div class="flex items-center justify-center mt-2 space-x-4">
+            <div class="flex items-center">
+                <input type="checkbox" id="disable-delay-checkbox" class="h-4 w-4 rounded bg-gray-700 border-gray-600 text-amber-500 focus:ring-amber-400">
+                <label for="disable-delay-checkbox" class="ml-2 text-sm font-medium text-amber-400">Disable Delay</label>
+            </div>
+        </div>
+         <button id="return-to-main-btn" class="hidden mt-4 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg w-full">Return to Main Screen</button>
+    </div>
+</div>
+
+<!-- Champion Setup Panel -->
+<div id="setup-panel" class="hidden fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-sm p-4 border-t-2 border-amber-400 z-50 overflow-y-auto">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex justify-between items-center mb-4">
+             <div>
+                <h3 class="text-xl font-bold text-amber-400">Roster Setup</h3>
+                <p id="roster-status" class="text-sm text-gray-400 h-5"></p>
+            </div>
+            <button id="close-setup-btn" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm mb-4">
+            <div class="bg-gray-800 p-3 rounded-lg">
+                 <h4 class="font-semibold text-center mb-2">Champions</h4>
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <h5 class="font-medium text-center text-gray-400">Major</h5>
+                        <div id="champion-list" class="space-y-2"></div>
+                    </div>
+                    <div class="space-y-2">
+                         <h5 class="font-medium text-center text-gray-400">Local</h5>
+                        <div id="local-champion-list" class="space-y-2 max-h-40 overflow-y-auto"></div>
+                    </div>
+                 </div>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h4 class="font-semibold text-center mb-2">Universe Fighters</h4>
+                <div id="universe-fighter-list" class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 max-h-48 overflow-y-auto"></div>
+                 <div class="mt-4 border-t border-gray-700 pt-3">
+                    <h4 class="font-semibold text-center mb-2">Universe Management</h4>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="add-fighter-steam-id" placeholder="Enter Steam App ID to Add" class="form-input w-full bg-gray-900 border-gray-600 rounded-md py-1 px-2 text-white">
+                        <button id="add-fighter-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-lg whitespace-nowrap">Add Fighter</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h4 class="font-semibold text-center mb-2">Potential Close Matchups</h4>
+                <div id="potential-matchups-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h4 class="font-semibold text-center mb-2">Potential Title Fights</h4>
+                <div id="potential-titles-list" class="space-y-1 max-h-48 overflow-y-auto"></div>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h4 class="font-semibold text-center mb-2">Retirement & Hall of Fame</h4>
+                <select id="retirement-fighter-select" class="form-select w-full bg-gray-900 border-gray-600 rounded-md py-1 px-2 text-white mb-2"></select>
+                <div class="flex gap-2 mb-3">
+                    <button id="retire-forgotten-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-1 px-2 rounded-lg text-xs w-1/2">Retire as Forgotten</button>
+                    <button id="retire-hof-btn" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2 rounded-lg text-xs w-1/2">Retire to Hall of Fame</button>
+                </div>
+                <div id="hall-of-fame-list" class="space-y-1 max-h-32 overflow-y-auto"></div>
+            </div>
+        </div>
+        <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h4 class="font-semibold text-center mb-2">Expand Universe</h4>
+                <p class="text-xs text-center text-gray-500 mb-2">Add fighters from genres not yet represented by a title.</p>
+                <div id="untapped-genres-list" class="space-y-1 max-h-48 overflow-y-auto">
+                    <!-- Genres will be populated here -->
+                </div>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-lg">
+                <h4 class="font-semibold text-center mb-2">Expand Existing Titles</h4>
+                <p class="text-xs text-center text-gray-500 mb-2">Add new contenders to existing title divisions.</p>
+                <div id="tapped-genres-list" class="space-y-1 max-h-48 overflow-y-auto">
+                    <!-- Genres will be populated here -->
+                </div>
+            </div>
+        </div>
+        <div class="mt-4 flex justify-between items-center">
+             <button id="apply-roster-changes-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Apply Changes</button>
+            <div class="flex items-center space-x-2">
+                <button id="reset-universe-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Reset Universe</button>
+                <button id="export-roster-btn" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg">Export Universe</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Genre Expansion Modal -->
+<div id="genre-expansion-modal" class="hidden fixed inset-0 bg-black bg-opacity-85 flex items-center justify-center z-[101] p-4">
+    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl border-2 border-green-500">
+        <h2 id="genre-expansion-title" class="text-2xl font-bold text-green-400 mb-4">Expand Universe</h2>
+        <div id="genre-expansion-list" class="flex-grow overflow-y-auto space-y-2 pr-2">
+            <!-- Game list will be populated here -->
+        </div>
+        <p id="genre-expansion-status" class="text-center text-gray-400 my-4 h-6"></p>
+        <div class="flex justify-center gap-4">
+            <button id="cancel-genre-expansion-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Cancel</button>
+            <button id="confirm-genre-expansion-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg" disabled>Add Fighters</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Record Modal -->
+<div id="edit-record-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col">
+        <h3 class="text-lg font-bold text-amber-400 mb-4">Edit Fighter Record</h3>
+        <div class="flex-grow overflow-y-auto pr-2">
+            <div class="space-y-3 text-sm">
+                <div>
+                    <label for="record-tko" class="block font-medium text-gray-300">TKO Wins</label>
+                    <input type="number" id="record-tko" class="form-input mt-1 w-full text-center bg-gray-700 border-gray-600 rounded-md py-2 px-1 text-white">
+                </div>
+                <div>
+                    <label for="record-ko" class="block font-medium text-gray-300">KO Wins</label>
+                    <input type="number" id="record-ko" class="form-input mt-1 w-full text-center bg-gray-700 border-gray-600 rounded-md py-2 px-1 text-white">
+                </div>
+                <div>
+                    <label for="record-losses" class="block font-medium text-gray-300">Losses</label>
+                    <input type="number" id="record-losses" class="form-input mt-1 w-full text-center bg-gray-700 border-gray-600 rounded-md py-2 px-1 text-white">
+                </div>
+            </div>
+            <div class="mt-6 border-t border-gray-700 pt-4">
+                 <h4 class="font-semibold text-gray-300 mb-2 text-center">Past Title Reigns</h4>
+                 <div id="past-titles-editor" class="space-y-2">
+                     <!-- Dynamically populated -->
+                 </div>
+            </div>
+        </div>
+        <div class="mt-6 flex justify-end gap-2 pt-4 border-t border-gray-700">
+            <button id="cancel-record-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+            <button id="save-record-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Save Record</button>
+        </div>
+    </div>
+</div>
+
+<!-- Title Selection Modal -->
+<div id="title-select-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-md">
+        <h3 class="text-lg font-bold text-amber-400 mb-4">Select Title for the Bout</h3>
+        <div id="title-options-container" class="space-y-3">
+            <!-- Radio buttons will be dynamically inserted here -->
+        </div>
+        <div class="mt-6 flex justify-end gap-2">
+            <button id="cancel-title-select-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+            <button id="confirm-title-select-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Help Modal -->
+<div id="help-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-2xl font-bold text-amber-400">Quick Start Guide</h3>
+            <button id="close-help-btn" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div class="space-y-4 overflow-y-auto text-gray-300 pr-2">
+            <h4 class="font-semibold text-lg text-white">Getting Started</h4>
+            <p>Welcome to Bout Time Reviews! This tool lets you pit any two things against each other in a simulated fight based on review scores.</p>
+            
+            <h4 class="font-semibold text-lg text-white">1. Creating a Fighter</h4>
+            <p>All fighters are created by fetching data from Steam. You have two ways to load one:</p>
+            <ul class="list-disc list-inside pl-4 space-y-1">
+                <li><strong>Select from Universe:</strong> Use the dropdown on either fighter card to select a fighter you've already added to your universe.</li>
+                <li><strong>Fetch by ID:</strong> Enter a valid Steam App ID into the "Steam App ID" field and click "Fetch". This will automatically pull the game's name, developer, publisher, and review scores. This will also add the fighter to your universe, potentially creating new genre-specific titles!</li>
+            </ul>
+            
+            <h4 class="font-semibold text-lg text-white">NEW! Universe Creation</h4>
+            <p>When you first load the app, you'll be asked to input at least 6 Steam App IDs. This creates your unique "universe" of fighters. The app will automatically create new "Local" titles for any game genre that appears two or more times in your starting lineup.</p>
+
+
+            <h4 class="font-semibold text-lg text-white">2. The Roster & Champions</h4>
+            <ul class="list-disc list-inside pl-4 space-y-1">
+                <li>Click the <span class="font-bold text-amber-400">Roster Icon</span> (the clipboard) in the "Hall of Champions" to open the Roster Manager.</li>
+                <li>Here you can see all current champions, including any new genre titles created. You can manually edit champion names or use the "Manual Universe" button to fill the roster with random fighters.</li>
+                <li>Use the "Add Fighter" input to add new games to your universe by Steam ID at any time.</li>
+                 <li>Click "Apply Changes" to save your roster.</li>
+            </ul>
+
+            <h4 class="font-semibold text-lg text-white">3. Title Matches & Progression</h4>
+             <ul class="list-disc list-inside pl-4 space-y-1">
+                <li>A "Title Available!" button will appear if a championship match is possible.</li>
+                <li><strong>Local Titles (e.g., 🥊, 🎯):</strong> Two contenders (fighters with no titles) can fight for a vacant local title.</li>
+                <li><strong>Major Titles (⚖️, 👑, ⭐):</strong> A fighter must hold a local title to challenge for a major title. If a major title is vacant, two local champions can fight for it (provided they meet any weight class requirements).</li>
+                <li><strong>Weight Classes:</strong> Fighters are categorized as Featherweight (score < 4), Cruiserweight (4-7), or Heavyweight (>= 7). A weight class title can only be fought for by two fighters in the same class.</li>
+                <li><strong>Undisputed Title (💎):</strong> This is the ultimate prize. A match for this title occurs when two major champions (Weight Class or Inter-Genre) fight each other, or when a major champion challenges the current Undisputed Champion.</li>
+            </ul>
+
+             <h4 class="font-semibold text-lg text-white">4. The Fight!</h4>
+            <p>Once your fighters are ready, click the "Fight!" button to start the simulation and see who comes out on top!</p>
+        </div>
+         <div class="mt-6 flex justify-end">
+            <button id="close-help-btn-bottom" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Got It!</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast-notification" class="hidden fixed bottom-5 right-5 bg-green-600 text-white py-3 px-5 rounded-lg shadow-lg text-center z-[101] transition-opacity duration-300">
+    <p id="toast-message"></p>
+</div>
+
+<!-- Confirmation Modal -->
+<div id="confirmation-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[102] p-4">
+    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-md text-center shadow-2xl border-2 border-yellow-500">
+        <h3 id="confirmation-title" class="text-xl font-bold text-yellow-400 mb-4">Are you sure?</h3>
+        <p id="confirmation-message" class="text-gray-300 mb-6">This action cannot be undone.</p>
+        <div class="flex justify-center gap-4">
+            <button id="confirm-cancel-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-lg">Cancel</button>
+            <button id="confirm-action-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Fighter Info Modal -->
+<div id="fighter-info-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[102] p-4">
+    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl border-2 border-blue-500">
+        <div class="flex justify-between items-center mb-4">
+            <h3 id="info-modal-name" class="text-2xl font-bold text-blue-400">Fighter Name</h3>
+            <button id="close-info-modal-btn" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+        </div>
+        <div class="space-y-3 overflow-y-auto text-gray-300 pr-2">
+            <p><strong>Record:</strong> <span id="info-modal-record"></span></p>
+            <p><strong>Weight Class:</strong> <span id="info-modal-weight-class"></span></p>
+            <p><strong>Developer:</strong> <span id="info-modal-dev"></span></p>
+            <p><strong>Publisher:</strong> <span id="info-modal-publisher"></span></p>
+            <div><strong>Genres:</strong> <div id="info-modal-genres" class="flex flex-wrap gap-2 mt-1"></div></div>
+            <div class="border-t border-gray-700 pt-3 mt-3">
+                <h4 class="font-semibold text-lg text-white mb-2">Title History</h4>
+                <div id="info-modal-title-history" class="space-y-1"></div>
+            </div>
+        </div>
+    </div>
+</div>

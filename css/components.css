@@ -1,0 +1,103 @@
+/* This file holds styles for specific components like modals, cards, etc. */
+
+/* --- SVG Boxer Base --- */
+#fighter1-svg g, #fighter2-svg g, #header-fighter-left g, #header-fighter-right g { 
+    transform-box: fill-box; 
+}
+
+/* --- Ticker styles --- */
+.ticker-wrap {
+    width: 100%;
+    overflow: hidden;
+    background-color: #1a202c; /* gray-900 */
+    border-radius: 0.5rem;
+    padding: 0.75rem 0;
+    position: absolute;
+    top: 1rem;
+    left: 0;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    border-top: 2px solid #FBBF24;
+    border-bottom: 2px solid #FBBF24;
+}
+.ticker-text {
+    white-space: nowrap;
+    display: inline-block;
+    padding-left: 100%;
+    font-size: 1.125rem; /* text-lg */
+    font-weight: 700; /* font-bold */
+    color: #FBBF24; /* amber-400 */
+}
+.ticker-blink {
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding-left: 0;
+}
+
+/* --- Title Display --- */
+.fighter-title-display {
+    opacity: 1;
+    transition: opacity 0.5s ease-out;
+}
+#fight-title-win-announcement {
+    position: absolute;
+    top: 40%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #FBBF24;
+    text-shadow: 0 0 10px #FBBF24, 0 0 20px #000;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+}
+
+/* --- Misc Components --- */
+.review-dropdown {
+    font-size: 0.875rem;
+}
+#fighter1-svg, #fighter2-svg {
+    transition: transform 1s ease-in-out;
+}
+.boxer-offscreen-left {
+    transform: translateX(-100px);
+}
+.boxer-offscreen-right {
+     transform: scaleX(-1) translateX(-100px);
+}
+.box-score-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+}
+.box-score-table th, .box-score-table td {
+    border: 1px solid #4B5563; /* gray-600 */
+    padding: 4px;
+    text-align: center;
+    min-width: 30px;
+}
+.box-score-table th {
+    background-color: #1F2937; /* gray-800 */
+}
+.box-score-total {
+    font-weight: bold;
+    background-color: #374151; /* gray-700 */
+}
+
+/* --- Referee Styles --- */
+#referee-svg {
+    position: absolute;
+    left: 50%;
+    top: 52%;
+    transform: translate(-50%, -50%);
+    width: 8rem; /* 128px */
+    height: 8rem; /* 128px */
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+}
+.ref-visible { 
+    opacity: 1 !important; 
+}

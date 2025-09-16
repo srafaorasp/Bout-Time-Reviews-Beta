@@ -1,0 +1,129 @@
+/* This file holds all @keyframes and animation-related classes. */
+
+/* --- Winner Glow --- */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 25px 5px rgba(250, 204, 21, 0.6);
+    border-color: rgba(250, 204, 21, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 40px 15px rgba(250, 204, 21, 0.9);
+    border-color: rgba(250, 204, 21, 1);
+  }
+}
+.winner-glow {
+    border: 2px solid;
+    animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* --- SVG Boxer Idle Animations --- */
+@keyframes idle-bob-torso { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes idle-bob-head { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(1deg) translateY(-1px); } }
+@keyframes idle-bob-arms { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-2deg); } }
+
+.boxer-idle > g > g { animation-play-state: running; }
+.boxer-idle #fighter1-torso, .boxer-idle #fighter2-torso, .boxer-idle #header-fighter-left-torso, .boxer-idle #header-fighter-right-torso { animation: idle-bob-torso 1.5s infinite ease-in-out; }
+.boxer-idle #fighter1-head, .boxer-idle #fighter2-head, .boxer-idle #header-fighter-left-head, .boxer-idle #header-fighter-right-head { animation: idle-bob-head 2s infinite ease-in-out; transform-origin: bottom center; }
+.boxer-idle #fighter1-left-arm, .boxer-idle #fighter2-left-arm, .boxer-idle #header-fighter-left-arm, .boxer-idle #header-fighter-right-arm { animation: idle-bob-arms 1.8s infinite ease-in-out; transform-origin: top left; }
+.boxer-idle #fighter1-right-arm, .boxer-idle #fighter2-right-arm, .boxer-idle #header-fighter-left-right-arm, .boxer-idle #header-fighter-right-right-arm { animation: idle-bob-arms 1.8s -0.2s infinite ease-in-out; transform-origin: top right;}
+
+/* --- SVG Boxer Action Animations --- */
+@keyframes punch-left-arm { 50% { transform: rotate(-65deg) translateX(-15px); } }
+.punching-left.use-left-arm #fighter1-left-arm { animation: punch-left-arm 0.3s ease-out; transform-origin: 50% 0; }
+.punching-left.use-right-arm #fighter1-right-arm { animation: punch-left-arm 0.3s ease-out; transform-origin: 50% 0; }
+        
+@keyframes punch-right-arm { 50% { transform: rotate(-65deg) translateX(-15px); } }
+.punching-right.use-left-arm #fighter2-left-arm { animation: punch-right-arm 0.3s ease-out; transform-origin: 50% 0; }
+.punching-right.use-right-arm #fighter2-right-arm { animation: punch-right-arm 0.3s ease-out; transform-origin: 50% 0; }
+        
+@keyframes hit-flash-effect {
+    0%, 100% { filter: drop-shadow(0 0 0px #ef4444); }
+    50% { filter: drop-shadow(0 0 8px #ef4444) brightness(1.5); }
+}
+@keyframes hit-recoil-head { 50% { transform: rotate(-15deg) translate(-5px, 2px); } }
+.hit-flash #fighter1-head, .hit-flash #fighter2-head { animation: hit-recoil-head 0.3s ease-out; transform-origin: bottom center; }
+.hit-flash { animation: hit-flash-effect 0.3s ease-in-out; }
+
+@keyframes raise-arm-celebration {
+    50% { transform: rotate(-90deg) translateY(-10px); }
+    100% { transform: rotate(0deg); }
+}
+.boxer-idle .celebrate-arm { animation: raise-arm-celebration 1s ease-in-out; }
+
+@keyframes knocked-down-anim {
+    to { transform: rotate(90deg) translateY(30px); opacity: 0.8; }
+}
+.knocked-down { 
+    transform-origin: 50% 85%; /* Rotate from the feet */
+    animation: knocked-down-anim 0.5s ease-out forwards; 
+}
+
+/* --- Ticker Animations --- */
+.scrolling {
+    animation-name: ticker-scroll;
+    animation-timing-function: linear;
+    animation-iteration-count: 1;
+}
+@keyframes ticker-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+}
+@keyframes blink-effect {
+    50% { opacity: 0; }
+}
+.ticker-blink {
+    animation: blink-effect 1s step-end infinite;
+}
+
+/* --- Title Animations --- */
+@keyframes pulse-fanfare {
+  0%, 100% { text-shadow: 0 0 4px #fff, 0 0 10px #fff, 0 0 18px #fde047; color: #fde047; }
+  50% { text-shadow: 0 0 8px #fff, 0 0 16px #fde047, 0 0 30px #facc15; color: #fef08a; }
+}
+.title-fanfare {
+    animation: pulse-fanfare 1.5s infinite;
+    font-weight: 900;
+}
+@keyframes move-title-from-left {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(110%, -150%) scale(1.5); opacity: 0; }
+}
+.animate-title-from-left {
+    animation: move-title-from-left 1.5s ease-in-out forwards;
+}
+@keyframes move-title-from-right {
+    0% { transform: translate(0, 0) scale(1); opacity: 1; }
+    100% { transform: translate(-110%, -150%) scale(1.5); opacity: 0; }
+}
+.animate-title-from-right {
+    animation: move-title-from-right 1.5s ease-in-out forwards;
+}
+@keyframes animate-title-to-winner-left {
+    0% { opacity: 1; transform: translate(-50%, 0) scale(1.2); }
+    100% { opacity: 0; transform: translate(-125%, -250%) scale(0.8); }
+}
+.animate-title-to-winner-left {
+     animation: animate-title-to-winner-left 1.5s ease-in-out forwards;
+}
+@keyframes animate-title-to-winner-right {
+    0% { opacity: 1; transform: translate(-50%, 0) scale(1.2); }
+    100% { opacity: 0; transform: translate(25%, -250%) scale(0.8); }
+}
+.animate-title-to-winner-right {
+     animation: animate-title-to-winner-right 1.5s ease-in-out forwards;
+}
+
+/* --- Referee Animations --- */
+@keyframes ref-arm-raise {
+    0% { transform: rotate(0); }
+    50% { transform: rotate(-90deg); }
+    100% { transform: rotate(0); }
+}
+.ref-start-fight #ref-arm-right { animation: ref-arm-raise 1s ease-in-out; transform-origin: top right; }
+
+@keyframes ref-counting {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+.ref-counting #ref-arm-left { animation: ref-counting 1s infinite ease-in-out; transform-origin: top left; }
+
