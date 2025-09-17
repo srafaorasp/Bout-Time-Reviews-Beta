@@ -1,13 +1,13 @@
-
-import { state, dom, createNewFighter, updateFighterInUniverse, saveUniverseToLocalStorage, GENRE_SYMBOLS, PAST_TITLE_SYMBOLS, GRAND_SLAM_SYMBOL, HALL_OF_FAME_SYMBOL, addFighterToUniverse, loadRoster } from './state.js';
-import { calculateRawScore, applyBonuses, getWeightClass, getChampionshipBonus } from './fight.js';
-import { downloadJSON, triggerFileUpload } from './utils.js';
-import { fetchAndAddSingleFighter, populateUniverseFromSteamIds, fetchWithProxyRotation } from './api.js';
+import { state, dom, createNewFighter, updateFighterInUniverse, saveUniverseToLocalStorage, GENRE_SYMBOLS, PAST_TITLE_SYMBOLS, GRAND_SLAM_SYMBOL, HALL_OF_FAME_SYMBOL, addFighterToUniverse, loadRoster, updateTimestamp } from './state.js';
+import { calculateRawScore, applyBonuses, getWeightClass } from './fight.js';
+import { downloadJSON } from './utils.js';
+import { fetchWithProxyRotation } from './api.js';
 
 // --- UI & DISPLAY FUNCTIONS ---
 
 export function showToast(message, duration = 5000) {
     const toast = dom.toast;
+    if (!toast || !toast.container || !toast.message) return;
     toast.message.textContent = message;
     toast.container.classList.remove('hidden');
     toast.container.classList.add('opacity-100');
@@ -114,13 +114,12 @@ export function loadCardFromData(prefix, data) {
     const fighterObject = (prefix === 'item1') ? state.fighter1 : state.fighter2;
     const cardElements = (prefix === 'item1') ? dom.cards.item1 : dom.cards.item2;
     
-    // Create a fresh fighter object and merge data to avoid reference issues
     const newFighter = createNewFighter();
     Object.assign(newFighter, JSON.parse(JSON.stringify(data)));
     Object.assign(fighterObject, newFighter);
 
     if (!fighterObject.lastModified) {
-        import('./state.js').then(stateModule => stateModule.updateTimestamp(fighterObject));
+        updateTimestamp(fighterObject);
     }
     
     cardElements.name.textContent = fighterObject.name;
@@ -171,12 +170,10 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
     if(winnerFighter) {
         if (winType === 'KO') winnerFighter.record.ko++; else winnerFighter.record.tko++;
         loserFighter.record.losses++;
-        import('./state.js').then(stateModule => {
-            stateModule.updateTimestamp(winnerFighter);
-            stateModule.updateTimestamp(loserFighter);
-            updateFighterInUniverse(winnerFighter);
-            updateFighterInUniverse(loserFighter);
-        });
+        updateTimestamp(winnerFighter);
+        updateTimestamp(loserFighter);
+        updateFighterInUniverse(winnerFighter);
+        updateFighterInUniverse(loserFighter);
         state.boutWinnerData = JSON.parse(JSON.stringify(winnerFighter));
         dom.center.winnerBox.title.textContent = `${winnerName} Wins!`;
         if(winnerIsFighter1) dom.cards.item1.card.classList.add('winner-glow');
@@ -186,7 +183,6 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
     dom.center.winnerBox.text.textContent = `Won by ${winType} in Round ${finalRound}`;
 
     if (state.selectedTitleForFight !== 'none' && winnerName && winnerName !== 'draw') {
-        // Handle title change logic... (This is a large block, kept as is)
         const winnerStatusBefore = getChampionStatus(winnerName);
         const loserStatus = getChampionStatus(loserFighter.name);
         
@@ -197,7 +193,7 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
             const previousTitleKey = winnerStatusBefore.status === 'local' ? winnerStatusBefore.key : winnerStatusBefore.status;
             winnerFighter.record.pastTitles[previousTitleKey] = (winnerFighter.record.pastTitles[previousTitleKey] || 0) + 1;
         }
-        import('./state.js').then(s => s.updateTimestamp(winnerFighter));
+        updateTimestamp(winnerFighter);
 
         const winnerData = JSON.parse(JSON.stringify(winnerFighter));
         const selectedTitle = state.selectedTitleForFight;
@@ -243,7 +239,10 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
     dom.center.nextRoundClearBtn.classList.remove('hidden');
 }
 
-// --- All other UI functions ---
-// (This would be a very long list of exports, including populateSetupPanel, masterReset, etc.)
-export * from './ui_helpers.js'; // Assuming we move smaller helpers to another file for clarity
-export { populateSetupPanel, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, displayFighterInfoModal, retireFighter, openGenreExpansionModal, openTop100Selection, calculateAndDisplayOdds, updateRecordDisplays, updateChampionSymbols, updateVsTitles, updateTitleAvailability, updateTitleMatchAnnouncement, updateRoundsDisplay, updateCommonGenresDisplay, getMajorChampionInfo, getLocalChampionInfo, hasAchievedGrandSlam, getPastTitleSymbol, setSelectedTitle, clearBothCards, clearForNextRound, populateAndShowEditModal, updateFightUI, updateHitBonusDisplay, displayInitialFighterTitles, animateTitleBout };
+export function logFightMessage(html) {
+    dom.fightModal.log.insertAdjacentHTML('beforeend', html);
+    dom.fightModal.log.scrollTop = dom.fightModal.log.scrollHeight;
+}
+
+export * from './ui_helpers.js';
+

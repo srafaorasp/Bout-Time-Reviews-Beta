@@ -1,5 +1,5 @@
 import { state, dom, punchTypes } from './state.js';
-import { displayFightWinner, logFightMessage } from './ui.js';
+import { displayFightWinner, logFightMessage, updateFightUI, displayInitialFighterTitles, animateTitleBout, updateHitBonusDisplay, getMajorChampionInfo, getLocalChampionInfo, hasAchievedGrandSlam } from './ui.js';
 import { playBellSequence, playSound, speak } from './sound.js';
 import { delay } from './utils.js';
 
@@ -31,6 +31,7 @@ export function getChampionshipBonus(fighterObject) {
 }
 
 export function calculateRawScore(fighterObject) {
+    if (!fighterObject) return 0;
     const metacriticInput = fighterObject.scores.metacritic;
     const metacriticScore = (metacriticInput !== '404' && metacriticInput) ? parseFloat(metacriticInput) / 10.0 : 0;
     let totalScore = 0, weightCount = 0;
@@ -52,6 +53,7 @@ export function calculateRawScore(fighterObject) {
 }
 
 export function applyBonuses(rawScore, fighterObject) {
+    if (!fighterObject) return 0;
     return rawScore * (1 + getChampionshipBonus(fighterObject));
 }
 
@@ -143,9 +145,6 @@ async function runSingleTickerSegment(segment, boxerId, fighterIndex) {
 }
 
 async function runTickerIntro(maxRounds, f1, f2) {
-    const { getMajorChampionInfo, getLocalChampionInfo } = await import('./ui.js');
-    const { hasAchievedGrandSlam } = await import('./ui.js');
-    
     function buildFighterAnnouncement(fighterNum, currentFighter1, currentFighter2) {
         const fighterObject = fighterNum === 1 ? currentFighter1 : currentFighter2;
         const { name, record, devHouse, publisher } = fighterObject;
@@ -240,8 +239,6 @@ async function runTickerIntro(maxRounds, f1, f2) {
 
 
 export async function startFight() {
-    const { displayInitialFighterTitles, animateTitleBout, updateFightUI } = await import('./ui.js');
-    
     state.fightCancellationToken.cancelled = false;
     dom.fightModal.returnBtn.classList.add('hidden');
     dom.fightModal.referee.classList.remove('ref-visible', 'ref-counting', 'ref-start-fight');
@@ -265,7 +262,7 @@ export async function startFight() {
 
     dom.fightModal.boxScoreContainer.innerHTML = `
         <table class="box-score-table">
-            <thead><tr id="box-score-header"><th>Fighter</th><th class="box-score-total">Total</th></tr></thead>
+            <thead><tr id="box-score-header"><th class="w-1/3">Fighter</th><th class="box-score-total">Total</th></tr></thead>
             <tbody>
                 <tr id="box-score-fighter1"><td class="font-bold text-blue-400 truncate">${state.fighter1.name || 'Fighter 1'}</td><td id="total-score-1" class="box-score-total">0</td></tr>
                 <tr id="box-score-fighter2"><td class="font-bold text-purple-400 truncate">${state.fighter2.name || 'Fighter 2'}</td><td id="total-score-2" class="box-score-total">0</td></tr>
@@ -308,7 +305,6 @@ export async function startFight() {
         else goliathDefenseBonus2 = scalingFactor;
     }
 
-    const { updateHitBonusDisplay } = await import('./ui.js');
     updateHitBonusDisplay(underdogBonus1, underdogBonus2);
 
     async function handleKnockdown(fighterId) {
@@ -402,6 +398,7 @@ export async function startFight() {
         if(round > 1) await playBellSequence(1);
 
         for(let turn = 0; turn < 20; turn++){
+            if(state.fightCancellationToken.cancelled) break fightLoop;
             dom.fightModal.turnCounter.textContent = `${20-turn} turns left`; 
             const isF1Turn = turn % 2 === 0; 
             
@@ -496,31 +493,54 @@ export async function startFight() {
         totalPoints1 += roundScore1;
         totalPoints2 += roundScore2;
         
-        document.getElementById('box-score-header').insertAdjacentHTML('beforeend', `<th>R${round}</th>`);
-        document.getElementById('box-score-fighter1').insertAdjacentHTML('beforeend', `<td>${roundScore1}</td>`);
-        document.getElementById('box-score-fighter2').insertAdjacentHTML('beforeend', `<td>${roundScore2}</td>`);
+        document.getElementById('box-score-header').lastElementChild.insertAdjacentHTML('beforebegin', `<th>R${round}</th>`);
+        document.getElementById('box-score-fighter1').lastElementChild.insertAdjacentHTML('beforebegin', `<td>${roundScore1}</td>`);
+        document.getElementById('box-score-fighter2').lastElementChild.insertAdjacentHTML('beforebegin', `<td>${roundScore2}</td>`);
         document.getElementById('total-score-1').textContent = totalPoints1;
         document.getElementById('total-score-2').textContent = totalPoints2;
         
         await playBellSequence(1);
         logFightMessage(`<p class="text-green-400 mt-2">End of Round ${round}. Recovery phase!</p>`);
         if(round < maxRounds) {
-            health1 = Math.min(100, health1 + (damageThisRound1 * (0.10 + (stamina1 / 100) * 0.65)));
-            health2 = Math.min(100, health2 + (damageThisRound2 * (0.10 + (stamina2 / 100) * 0.65)));
-            stamina1 = Math.min(100, stamina1 + Math.max(5, 40 - (round * 2.5)));
-            stamina2 = Math.min(100, stamina2 + Math.max(5, 40 - (round * 2.5)));
+            const healPercentage1 = 0.10 + (stamina1 / 100) * 0.65;
+            const healPercentage2 = 0.10 + (stamina2 / 100) * 0.65;
+            
+            const potentialHeal1 = damageThisRound1 * healPercentage1;
+            const potentialHeal2 = damageThisRound2 * healPercentage2;
+
+            const finalHeal1 = Math.min(potentialHeal1, damageThisRound1 * 0.9);
+            const finalHeal2 = Math.min(potentialHeal2, damageThisRound2 * 0.9);
+
+            health1 = Math.min(100, health1 + finalHeal1);
+            health2 = Math.min(100, health2 + finalHeal2);
+            
+            const roundFatigueFactor = round * 2.5;
+            const baseStaminaRecovery = 40;
+            stamina1 = Math.min(100, stamina1 + Math.max(5, baseStaminaRecovery - roundFatigueFactor));
+            stamina2 = Math.min(100, stamina2 + Math.max(5, baseStaminaRecovery - roundFatigueFactor));
+
+            logFightMessage(`<p class="text-green-400">${dom.fightModal.fighter1.name.textContent} recovers ${finalHeal1.toFixed(1)} health!</p>`);
+            logFightMessage(`<p class="text-green-400">${dom.fightModal.fighter2.name.textContent} recovers ${finalHeal2.toFixed(1)} health!</p>`);
+
             updateFightUI(health1, stamina1, health2, stamina2);
             await delay(dom.fightModal.disableDelayCheckbox.checked ? 2000 : 10000);
         }
     }
 
     if (!fightWinnerName) { 
-        logFightMessage(`<p class="text-yellow-400 font-bold text-center py-2">WE GO TO THE JUDGES' SCORECARDS!</p>`);
+        logFightMessage(`<p class="text-yellow-400 font-bold text-center py-2 border-y border-gray-700">WE GO TO THE JUDGES' SCORECARDS!</p><p class="text-blue-400">${dom.fightModal.fighter1.name.textContent}: ${totalPoints1} points</p><p class="text-purple-400">${dom.fightModal.fighter2.name.textContent}: ${totalPoints2} points</p>`); 
         await delay(2000); 
-        if (totalPoints1 > totalPoints2) { fightWinnerName = state.fighter1.name; winType = 'TKO'; } 
-        else if (totalPoints2 > totalPoints1) { fightWinnerName = state.fighter2.name; winType = 'TKO'; } 
-        else { fightWinnerName = 'draw'; winType = 'Draw'; } 
+        if (totalPoints1 > totalPoints2) { 
+            fightWinnerName = state.fighter1.name; winType = 'TKO'; 
+        } else if (totalPoints2 > totalPoints1) { 
+            fightWinnerName = state.fighter2.name; winType = 'TKO'; 
+        } else { 
+            fightWinnerName = 'draw'; winType = 'Draw'; 
+        } 
     }
     
-    await displayFightWinner(fightWinnerName, winType, finalRound);
+    if (!state.fightCancellationToken.cancelled) {
+      await displayFightWinner(fightWinnerName, winType, finalRound);
+    }
 }
+
