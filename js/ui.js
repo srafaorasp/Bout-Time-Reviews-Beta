@@ -243,6 +243,3 @@ export function logFightMessage(html) {
     dom.fightModal.log.insertAdjacentHTML('beforeend', html);
     dom.fightModal.log.scrollTop = dom.fightModal.log.scrollHeight;
 }
-
-export * from './ui_helpers.js';
-
