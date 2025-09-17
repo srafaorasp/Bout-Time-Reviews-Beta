@@ -13,6 +13,8 @@ const initialProxies = [
     //'https://cors-proxy.priver.dev/' // Often unreliable
 ];
 
+export const STEAMSPY_API_URL = 'https://steamspy.com/api.php';
+
 export async function fetchWithProxyRotation(apiUrl) {
     if (initialProxies.length === 0) {
         console.error("No proxies available.");
@@ -290,3 +292,4 @@ export async function populateUniverseFromSteamIds(ids) {
     dom.universeSetupModal.modal.classList.add('hidden');
     import('./state.js').then(stateModule => stateModule.saveUniverseToLocalStorage());
 }
+

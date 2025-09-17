@@ -1,4 +1,4 @@
-import { showToast, populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, displayFighterInfoModal, retireFighter, openGenreExpansionModal, openTop100Selection } from './ui.js';
+import { showToast, populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, displayFighterInfoModal, retireFighter, openGenreExpansionModal, openTop100Selection, populateAndShowEditModal, clearForNextRound, loadCardFromData, clearCard, clearBothCards } from './ui.js';
 import { fetchSteamData, updateScoresOnly, fetchAndAddSingleFighter, populateUniverseFromSteamIds } from './api.js';
 import { startFight } from './fight.js';
 import { downloadJSON, triggerFileUpload } from './utils.js';
@@ -73,9 +73,11 @@ export const updateTimestamp = (fighter) => {
 };
 
 export function updateFighterInUniverse(fighterData) {
+    if (!fighterData || !fighterData.appId) return;
     const index = state.universeFighters.findIndex(f => f.appId === fighterData.appId);
     if (index !== -1) {
-        state.universeFighters[index] = JSON.parse(JSON.stringify(fighterData));
+        // Deep merge to avoid losing properties
+        state.universeFighters[index] = { ...state.universeFighters[index], ...JSON.parse(JSON.stringify(fighterData)) };
     }
     saveUniverseToLocalStorage();
 }
@@ -131,10 +133,10 @@ export function loadRoster(data) {
 }
 
 // --- Universe and Title Generation ---
-function processUniverseForNewTitles() {
+export function processUniverseForNewTitles() {
     const genreCounts = {};
     state.universeFighters.forEach(fighter => {
-        fighter.genres?.forEach(genre => {
+        (fighter.genres || []).forEach(genre => {
             const g = genre.toLowerCase();
             genreCounts[g] = (genreCounts[g] || 0) + 1;
         });
@@ -217,32 +219,30 @@ export function attachEventListeners() {
     dom.center.nextRoundBtn.addEventListener('click', () => {
         if (state.boutWinnerData) {
             const winnerDataCopy = JSON.parse(JSON.stringify(state.boutWinnerData));
-            import('./ui.js').then(ui => {
-                ui.clearCard('item1');
-                ui.loadCardFromData('item2', winnerDataCopy);
-                ui.clearForNextRound();
-            });
+            clearCard('item1');
+            loadCardFromData('item2', winnerDataCopy);
+            clearForNextRound();
         } else {
-            import('./ui.js').then(ui => ui.clearBothCards());
+            clearBothCards();
         }
     }); 
-    dom.center.nextRoundClearBtn.addEventListener('click', () => import('./ui.js').then(ui => ui.clearBothCards())); 
+    dom.center.nextRoundClearBtn.addEventListener('click', clearBothCards); 
     dom.center.swapBtn.addEventListener('click', swapCards); 
     dom.triggers.reset.addEventListener('click', masterReset);
     dom.triggers.refresh.addEventListener('click', () => {
-        if (state.fighter1.appId) {
+        if (state.fighter1 && state.fighter1.appId) {
             const freshFighter1 = state.universeFighters.find(f => f.appId === state.fighter1.appId);
-            if (freshFighter1) import('./ui.js').then(ui => ui.loadCardFromData('item1', freshFighter1));
+            if (freshFighter1) loadCardFromData('item1', freshFighter1);
         }
-        if (state.fighter2.appId) {
+        if (state.fighter2 && state.fighter2.appId) {
             const freshFighter2 = state.universeFighters.find(f => f.appId === state.fighter2.appId);
-            if (freshFighter2) import('./ui.js').then(ui => ui.loadCardFromData('item2', freshFighter2));
+            if (freshFighter2) loadCardFromData('item2', freshFighter2);
         }
         updateScoresAndDisplay();
         showToast("UI Data Refreshed!", 3000);
     });
     dom.center.lowCardCheckbox.addEventListener('change', updateScoresAndDisplay);
-    dom.center.titleSelectBtn.addEventListener('click', () => openTitleSelectionModal());
+    dom.center.titleSelectBtn.addEventListener('click', openTitleSelectionModal);
     
     dom.titleSelectModal.confirmBtn.addEventListener('click', () => { 
         const selectedOption = document.querySelector('input[name="title-option"]:checked'); 
@@ -252,7 +252,7 @@ export function attachEventListeners() {
     });
 
     dom.fightModal.returnBtn.addEventListener('click', () => dom.fightModal.modal.classList.add('hidden')); 
-    dom.fightModal.skipIntroBtn.addEventListener('click', () => { state.fightCancellationToken.cancelled = true; speechSynthesis.cancel(); });
+    dom.fightModal.skipIntroBtn.addEventListener('click', () => { state.fightCancellationToken.cancelled = true; if('speechSynthesis' in window) speechSynthesis.cancel(); });
     dom.titleSelectModal.cancelBtn.addEventListener('click', () => dom.titleSelectModal.modal.classList.add('hidden'));
     
     dom.triggers.setup.addEventListener('click', () => { populateSetupPanel(); dom.setupPanel.panel.classList.remove('hidden') });
@@ -262,29 +262,38 @@ export function attachEventListeners() {
     dom.setupPanel.addFighterBtn.addEventListener('click', () => fetchAndAddSingleFighter(dom.setupPanel.addFighterIdInput.value));
     document.getElementById('reset-universe-btn').addEventListener('click', masterReset);
     
-    dom.cards.item1.exportBtn.addEventListener('click', () => downloadJSON(state.fighter1, `${state.fighter1.name || 'fighter_1'}.btr`));
-    dom.cards.item2.exportBtn.addEventListener('click', () => downloadJSON(state.fighter2, `${state.fighter2.name || 'fighter_2'}.btr`));
+    dom.cards.item1.exportBtn.addEventListener('click', () => { if(state.fighter1.appId) downloadJSON(state.fighter1, `${state.fighter1.name || 'fighter_1'}.btr`) });
+    dom.cards.item2.exportBtn.addEventListener('click', () => { if(state.fighter2.appId) downloadJSON(state.fighter2, `${state.fighter2.name || 'fighter_2'}.btr`) });
     dom.setupPanel.exportBtn.addEventListener('click', () => downloadJSON({ roster: state.roster, universeFighters: state.universeFighters }, 'bout_time_universe.btr'));
     
-    dom.cards.item1.importBtn.addEventListener('click', () => triggerFileUpload((data) => { import('./ui.js').then(ui => ui.loadCardFromData('item1', data)); updateScoresAndDisplay(); }, '.btr'));
-    dom.cards.item2.importBtn.addEventListener('click', () => triggerFileUpload((data) => { import('./ui.js').then(ui => ui.loadCardFromData('item2', data)); updateScoresAndDisplay(); }, '.btr'));
+    dom.cards.item1.importBtn.addEventListener('click', () => triggerFileUpload((data) => { loadCardFromData('item1', data); updateScoresAndDisplay(); }, '.btr'));
+    dom.cards.item2.importBtn.addEventListener('click', () => triggerFileUpload((data) => { loadCardFromData('item2', data); updateScoresAndDisplay(); }, '.btr'));
 
-    dom.cards.item1.editRecordBtn.addEventListener('click', () => { state.currentRecordEditTarget = 'item1'; import('./ui.js').then(ui => ui.populateAndShowEditModal(state.fighter1)); });
-    dom.cards.item2.editRecordBtn.addEventListener('click', () => { state.currentRecordEditTarget = 'item2'; import('./ui.js').then(ui => ui.populateAndShowEditModal(state.fighter2)); });
+    dom.cards.item1.editRecordBtn.addEventListener('click', () => { if(state.fighter1.appId) populateAndShowEditModal(state.fighter1) });
+    dom.cards.item2.editRecordBtn.addEventListener('click', () => { if(state.fighter2.appId) populateAndShowEditModal(state.fighter2) });
     
     dom.editRecordModal.saveBtn.addEventListener('click', () => { 
-        const fighter = state.currentRecordEditTarget === 'item1' ? state.fighter1 : state.fighter2; 
+        const fighter = state.universeFighters.find(f => f.appId === state.currentRecordEditTarget);
+        if (!fighter) return;
+
         fighter.record.tko = parseInt(dom.editRecordModal.tko.value, 10) || 0; 
         fighter.record.ko = parseInt(dom.editRecordModal.ko.value, 10) || 0; 
         fighter.record.losses = parseInt(dom.editRecordModal.losses.value, 10) || 0; 
+        
         const pastTitles = {}; 
         dom.editRecordModal.pastTitlesEditor.querySelectorAll('input[data-title-key]').forEach(input => { 
             const count = parseInt(input.value, 10) || 0; 
             if (count > 0) pastTitles[input.dataset.titleKey] = count; 
         }); 
         fighter.record.pastTitles = pastTitles; 
+        
         updateTimestamp(fighter);
         updateFighterInUniverse(fighter); 
+
+        // Also update the fighter if it's currently loaded in a card
+        if (state.fighter1.appId === fighter.appId) loadCardFromData('item1', fighter);
+        if (state.fighter2.appId === fighter.appId) loadCardFromData('item2', fighter);
+        
         import('./ui.js').then(ui => ui.updateRecordDisplays()); 
         updateScoresAndDisplay(); 
         dom.editRecordModal.modal.classList.add('hidden'); 
@@ -297,33 +306,39 @@ export function attachEventListeners() {
 
     dom.cards.item1.universeSelect.addEventListener('change', (e) => {
         const appId = e.target.value;
-        if (appId && state.fighter2.appId && appId === state.fighter2.appId) {
+        if (state.fighter2 && state.fighter2.appId && appId === state.fighter2.appId) {
             showToast("This fighter is already in the other corner!", 4000);
-            e.target.value = '';
+            e.target.value = state.fighter1.appId || '';
             return;
         }
         if (appId) {
             const selectedFighter = state.universeFighters.find(f => f.appId === appId);
             if (selectedFighter) {
-                import('./ui.js').then(ui => ui.loadCardFromData('item1', selectedFighter));
+                loadCardFromData('item1', selectedFighter);
                 updateScoresAndDisplay();
             }
+        } else {
+            clearCard('item1');
+            updateScoresAndDisplay();
         }
     });
 
     dom.cards.item2.universeSelect.addEventListener('change', (e) => {
         const appId = e.target.value;
-        if (appId && state.fighter1.appId && appId === state.fighter1.appId) {
+        if (state.fighter1 && state.fighter1.appId && appId === state.fighter1.appId) {
             showToast("This fighter is already in the other corner!", 4000);
-            e.target.value = '';
+            e.target.value = state.fighter2.appId || '';
             return;
         }
         if (appId) {
             const selectedFighter = state.universeFighters.find(f => f.appId === appId);
             if (selectedFighter) {
-                import('./ui.js').then(ui => ui.loadCardFromData('item2', selectedFighter));
+                loadCardFromData('item2', selectedFighter);
                 updateScoresAndDisplay();
             }
+        } else {
+            clearCard('item2');
+            updateScoresAndDisplay();
         }
     });
 
@@ -420,11 +435,11 @@ export function attachEventListeners() {
 
     dom.setupPanel.retireForgottenBtn.addEventListener('click', () => {
         const selectedId = dom.setupPanel.retirementSelect.value;
-        if(selectedId) retireFighter(selectedId, true);
+        if(selectedId) retireFighter(selectedId, false);
     });
     dom.setupPanel.retireHofBtn.addEventListener('click', () => {
         const selectedId = dom.setupPanel.retirementSelect.value;
-        if(selectedId) retireFighter(selectedId, false);
+        if(selectedId) retireFighter(selectedId, true);
     });
 
     dom.fighterInfoModal.closeBtn.addEventListener('click', () => dom.fighterInfoModal.modal.classList.add('hidden'));
@@ -446,6 +461,7 @@ export function attachEventListeners() {
             infoSpan.textContent = currentTitle;
         } else if (event.target.closest('.universe-fighter-entry')) {
             const fighterEntry = event.target.closest('.universe-fighter-entry');
+            if (event.target.closest('button')) return; // Ignore clicks on buttons inside the entry
             const appId = fighterEntry.dataset.appid;
             const fighterData = state.universeFighters.find(f => f.appId === appId);
             if (fighterData) {

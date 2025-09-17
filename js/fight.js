@@ -14,12 +14,13 @@ export function getWeightClass(rawScore) {
 }
 
 export function getChampionshipBonus(fighterObject) {
+    if (!fighterObject || !fighterObject.name) return 0;
     const potentialBonuses = [0];
     const name = fighterObject.name;
-    if (!name || name === 'Vacant' || (fighterObject.isRetired && !fighterObject.isHallOfFamer)) return 0;
+    if (name === 'Vacant' || (fighterObject.isRetired && !fighterObject.isHallOfFamer)) return 0;
 
     if (name === state.roster.major.undisputed.name) potentialBonuses.push(0.03);
-    if (['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].some(key => name === state.roster.major[key].name)) potentialBonuses.push(0.02);
+    if (['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].some(key => state.roster.major[key].name === name)) potentialBonuses.push(0.02);
     if (Object.keys(state.roster.local).some(key => state.roster.local[key].name === name)) potentialBonuses.push(0.01);
     
     const pastTitles = fighterObject.record.pastTitles || {};
@@ -48,6 +49,9 @@ export function calculateRawScore(fighterObject) {
             totalScore += metacriticScore * 0.30;
             weightCount += 0.30;
         }
+    } else if (metacriticScore > 0) { // Fallback if no steam data
+        totalScore = metacriticScore;
+        weightCount = 1;
     }
     return weightCount > 0 ? totalScore / weightCount : 0;
 }
