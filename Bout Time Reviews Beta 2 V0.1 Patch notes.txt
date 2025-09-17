@@ -1,0 +1,60 @@
+Bout Time Reviews - Patch Notes
+Version: Beta 2 V 0.1
+Release Date: September 17, 2025
+
+This update represents a complete architectural overhaul of Bout Time Reviews, moving from the previous single-file proof-of-concept (Beta 3.0) to a scalable, multi-file application structure. This refactoring has allowed for numerous bug fixes, logic corrections, and new features to be implemented.
+
+Major Changes & New Features
+Complete Code Refactor: The entire application has been modularized. The logic is now separated into distinct files for state management (state.js), UI manipulation (ui.js), fight simulation (fight.js), API calls (api.js), and more. CSS has also been split into dedicated files for styles, components, and animations. This significantly improves code readability, organization, and future development speed.
+
+Unified Fighter Modal: The previous "View Info" and "Edit Record" functions have been merged into a single, powerful "Fighter Data" modal.
+
+Users can view all of a fighter's stats and history in a clean, read-only view.
+
+An "Edit Record" button switches the modal to an editable state, allowing for changes to win/loss records and past title reigns.
+
+Manual Title Vacation: A "Vacate Title" button has been added to the new Fighter Data modal. This button only appears for current champions and allows for the manual removal of a title after confirmation.
+
+Bug Fixes & Gameplay Improvements
+Title Logic Overhaul:
+
+Corrected the logic for title inheritance. Fighters now correctly hold only one title at a time.
+
+When a fighter wins a unification bout (e.g., for the Undisputed title), their previous Major title is now correctly vacated.
+
+When a fighter wins a Major title, their previous Local title is now correctly vacated.
+
+Losers of title matches are now correctly stripped of their belts.
+
+Past Title Records: Fixed a critical bug where winning a championship did not correctly add the victory to the fighter's personal pastTitles record. This history is now accurately tracked.
+
+Announcer & Animation:
+
+Fixed several announcer bugs, including the repetition of the word "the" and incorrect phrasing during unification matches.
+
+Resolved an issue where the glowing text for a title bout announcement was being visually clipped.
+
+Corrected the knockdown animation for the fighter in the blue corner to ensure they fall in the proper direction (away from the opponent).
+
+Restored the full pre-fight title presentation animations and the end-of-fight victory animation where the title moves over the winner's head.
+
+Fight Simulation:
+
+Fixed a bug where the stamina state text ("WINDED," "EXHAUSTED") was not appearing on screen during a fight.
+
+Resolved a critical issue where a knockout in a title match could cause the UI to become unresponsive and not properly conclude the fight.
+
+UI & UX:
+
+The "Fighter Data" button text on the main cards has been updated for clarity.
+
+Champion, past champion, and Hall of Fame icons now correctly appear next to fighter names in the selection dropdowns.
+
+Refined the "Potential Title Fights" logic in the Roster panel to intelligently prioritize and display the most compelling matchup for each available title first.
+
+Resolved a core bug that prevented any title matches from appearing in the "Potential Title Fights" list.
+
+Fixed initial page load errors caused by duplicate HTML content and script race conditions.
+
+Known Issues
+The design and mockup of SVG title belt assets has been completed, but their implementation into the fight animations has been postponed for a future update.
