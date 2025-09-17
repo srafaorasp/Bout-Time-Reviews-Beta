@@ -1,3 +1,5 @@
+<!-- All modal HTML has been moved here from index.html -->
+
 <!-- Initial Steam Universe Setup Modal -->
 <div id="universe-setup-modal" class="hidden fixed inset-0 bg-black bg-opacity-85 flex items-center justify-center z-[100] p-4">
     <div class="bg-gray-800 p-8 rounded-2xl w-full max-w-lg text-center shadow-2xl border-2 border-amber-400">
@@ -273,12 +275,24 @@
     </div>
 </div>
 
-<!-- Edit Record Modal -->
-<div id="edit-record-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-md max-h-[90vh] flex flex-col">
-        <h3 class="text-lg font-bold text-amber-400 mb-4">Edit Fighter Record</h3>
-        <div class="flex-grow overflow-y-auto pr-2">
-            <div class="space-y-3 text-sm">
+<!-- Unified Fighter Info / Edit Modal -->
+<div id="fighter-info-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl border-2 border-blue-500">
+        <div class="flex justify-between items-center mb-4">
+            <h3 id="info-modal-name" class="text-2xl font-bold text-blue-400">Fighter Name</h3>
+            <button id="info-modal-close-btn" class="text-gray-400 hover:text-white text-3xl">&times;</button>
+        </div>
+        <div class="space-y-3 overflow-y-auto text-gray-300 pr-2 flex-grow">
+            <!-- View Mode -->
+            <div id="info-modal-view-state">
+                 <p><strong>Record:</strong> <span id="info-modal-record-view"></span></p>
+                 <p><strong>Weight Class:</strong> <span id="info-modal-weight-class-view"></span></p>
+                 <p><strong>Developer:</strong> <span id="info-modal-dev-view"></span></p>
+                 <p><strong>Publisher:</strong> <span id="info-modal-publisher-view"></span></p>
+                 <div><strong>Genres:</strong> <div id="info-modal-genres-view" class="flex flex-wrap gap-2 mt-1"></div></div>
+            </div>
+            <!-- Edit Mode -->
+            <div id="info-modal-edit-state" class="hidden space-y-3 text-sm">
                 <div>
                     <label for="record-tko" class="block font-medium text-gray-300">TKO Wins</label>
                     <input type="number" id="record-tko" class="form-input mt-1 w-full text-center bg-gray-700 border-gray-600 rounded-md py-2 px-1 text-white">
@@ -292,19 +306,26 @@
                     <input type="number" id="record-losses" class="form-input mt-1 w-full text-center bg-gray-700 border-gray-600 rounded-md py-2 px-1 text-white">
                 </div>
             </div>
-            <div class="mt-6 border-t border-gray-700 pt-4">
-                 <h4 class="font-semibold text-gray-300 mb-2 text-center">Past Title Reigns</h4>
-                 <div id="past-titles-editor" class="space-y-2">
-                     <!-- Dynamically populated -->
+            
+             <div class="border-t border-gray-700 pt-3 mt-3">
+                <h4 class="font-semibold text-lg text-white mb-2">Title History</h4>
+                <div id="info-modal-title-history" class="space-y-1"></div>
+                 <div id="info-modal-title-history-edit" class="hidden space-y-2">
+                     <!-- Dynamically populated for editing -->
                  </div>
             </div>
         </div>
-        <div class="mt-6 flex justify-end gap-2 pt-4 border-t border-gray-700">
-            <button id="cancel-record-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
-            <button id="save-record-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Save Record</button>
+        <div class="mt-6 flex justify-between items-center pt-4 border-t border-gray-700">
+             <button id="info-modal-vacate-btn" class="hidden bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg">Vacate Title</button>
+            <div class="flex justify-end gap-2 w-full">
+                <button id="info-modal-edit-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Edit Record</button>
+                <button id="info-modal-save-btn" class="hidden bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Save Changes</button>
+                <button id="info-modal-cancel-btn" class="hidden bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancel</button>
+            </div>
         </div>
     </div>
 </div>
+
 
 <!-- Title Selection Modal -->
 <div id="title-select-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
@@ -381,27 +402,6 @@
         <div class="flex justify-center gap-4">
             <button id="confirm-cancel-btn" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-6 rounded-lg">Cancel</button>
             <button id="confirm-action-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg">Confirm</button>
-        </div>
-    </div>
-</div>
-
-<!-- Fighter Info Modal -->
-<div id="fighter-info-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[102] p-4">
-    <div class="bg-gray-800 p-6 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl border-2 border-blue-500">
-        <div class="flex justify-between items-center mb-4">
-            <h3 id="info-modal-name" class="text-2xl font-bold text-blue-400">Fighter Name</h3>
-            <button id="close-info-modal-btn" class="text-gray-400 hover:text-white text-3xl">&times;</button>
-        </div>
-        <div class="space-y-3 overflow-y-auto text-gray-300 pr-2">
-            <p><strong>Record:</strong> <span id="info-modal-record"></span></p>
-            <p><strong>Weight Class:</strong> <span id="info-modal-weight-class"></span></p>
-            <p><strong>Developer:</strong> <span id="info-modal-dev"></span></p>
-            <p><strong>Publisher:</strong> <span id="info-modal-publisher"></span></p>
-            <div><strong>Genres:</strong> <div id="info-modal-genres" class="flex flex-wrap gap-2 mt-1"></div></div>
-            <div class="border-t border-gray-700 pt-3 mt-3">
-                <h4 class="font-semibold text-lg text-white mb-2">Title History</h4>
-                <div id="info-modal-title-history" class="space-y-1"></div>
-            </div>
         </div>
     </div>
 </div>

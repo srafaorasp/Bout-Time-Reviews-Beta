@@ -149,6 +149,24 @@ export function loadCardFromData(prefix, data) {
     }
 }
 
+function vacateAllTitles(fighterName) {
+    if (!fighterName || fighterName === 'Vacant') return;
+    
+    Object.keys(state.roster.major).forEach(key => {
+        if (state.roster.major[key].name === fighterName) {
+            state.roster.major[key].name = 'Vacant';
+            state.roster.major[key].data = null;
+        }
+    });
+    Object.keys(state.roster.local).forEach(key => {
+        if (state.roster.local[key].name === fighterName) {
+            state.roster.local[key].name = 'Vacant';
+            state.roster.local[key].data = null;
+        }
+    });
+}
+
+
 export async function displayFightWinner(fightWinnerName, winType, finalRound) {
     try {
         state.boutWinnerData = null;
@@ -185,8 +203,7 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
 
             updateTimestamp(winnerFighter);
             updateTimestamp(loserFighter);
-            updateFighterInUniverse(winnerFighter);
-            updateFighterInUniverse(loserFighter);
+           
             state.boutWinnerData = JSON.parse(JSON.stringify(winnerFighter));
             dom.center.winnerBox.title.textContent = `${winnerName} Wins!`;
             if (winnerIsFighter1) dom.cards.item1.card.classList.add('winner-glow');
@@ -196,35 +213,35 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
         dom.center.winnerBox.text.textContent = `Won by ${winType} in Round ${finalRound}`;
 
         if (state.selectedTitleForFight !== 'none' && winnerName && winnerName !== 'draw') {
-            const winnerStatusBefore = getChampionStatus(winnerName);
-            const loserStatus = getChampionStatus(loserFighter.name);
-            
+             const winnerStatusBefore = getChampionStatus(winnerName);
+
+            // Add to past titles FIRST, before vacating.
             winnerFighter.record.pastTitles = winnerFighter.record.pastTitles || {};
             winnerFighter.record.pastTitles[state.selectedTitleForFight] = (winnerFighter.record.pastTitles[state.selectedTitleForFight] || 0) + 1;
-            
+
             if (winnerStatusBefore.status !== 'contender' && winnerStatusBefore.status !== state.selectedTitleForFight) {
                 const previousTitleKey = winnerStatusBefore.status === 'local' ? winnerStatusBefore.key : winnerStatusBefore.status;
-                winnerFighter.record.pastTitles[previousTitleKey] = (winnerFighter.record.pastTitles[previousTitleKey] || 0) + 1;
+                if(previousTitleKey) { // Ensure key exists
+                    winnerFighter.record.pastTitles[previousTitleKey] = (winnerFighter.record.pastTitles[previousTitleKey] || 0) + 1;
+                }
             }
-            updateTimestamp(winnerFighter);
-
+            
             const winnerData = JSON.parse(JSON.stringify(winnerFighter));
             const selectedTitle = state.selectedTitleForFight;
             
-            if (selectedTitle === 'undisputed') {
-                bellCount = 6;
-                if (winnerStatusBefore.status !== 'contender' && winnerStatusBefore.status !== 'undisputed' && winnerStatusBefore.status !== 'local') state.roster.major[winnerStatusBefore.status].name = 'Vacant'; state.roster.major[winnerStatusBefore.status].data = null;
-                if (loserStatus.status !== 'contender' && loserStatus.status !== 'undisputed' && loserStatus.status !== 'local') state.roster.major[loserStatus.status].name = 'Vacant'; state.roster.major[loserStatus.status].data = null;
-                if (loserStatus.status === 'local' && state.roster.major[selectedTitle]?.name === 'Vacant') state.roster.local[loserStatus.key].name = 'Vacant'; state.roster.local[loserStatus.key].data = null;
-                state.roster.major.undisputed = { ...state.roster.major.undisputed, name: winnerName, data: winnerData };
-            } else if (state.roster.major[selectedTitle]) {
-                bellCount = 4;
-                if(winnerStatusBefore.status === 'local') state.roster.local[winnerStatusBefore.key].name = 'Vacant'; state.roster.local[winnerStatusBefore.key].data = null;
-                if (loserStatus.status === 'local' && state.roster.major[selectedTitle]?.name === 'Vacant') state.roster.local[loserStatus.key].name = 'Vacant'; state.roster.local[loserStatus.key].data = null;
-                state.roster.major[selectedTitle] = { ...state.roster.major[selectedTitle], name: winnerName, data: winnerData };
+            // Vacate all titles from both fighters first to handle unifications correctly.
+            vacateAllTitles(winnerFighter.name);
+            vacateAllTitles(loserFighter.name);
+            
+            // Now, crown the new champion.
+            if (state.roster.major[selectedTitle]) {
+                state.roster.major[selectedTitle].name = winnerName;
+                state.roster.major[selectedTitle].data = winnerData;
+                bellCount = selectedTitle === 'undisputed' ? 6 : 4;
             } else if (state.roster.local[selectedTitle]) {
+                state.roster.local[selectedTitle].name = winnerName;
+                state.roster.local[selectedTitle].data = winnerData;
                 bellCount = 3;
-                state.roster.local[selectedTitle] = { ...state.roster.local[selectedTitle], name: winnerName, data: winnerData };
             }
             
             const titleObject = state.roster.major[selectedTitle] || state.roster.local[selectedTitle];
@@ -240,6 +257,10 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
             await import('./utils.js').then(u => u.delay(1500)); 
             dom.center.titleMatchAnnouncement.innerHTML = mainScreenAnnouncement;
         }
+        
+        // Update universe data after title changes
+        updateFighterInUniverse(winnerFighter);
+        updateFighterInUniverse(loserFighter);
 
         import('./sound.js').then(s => s.playBellSequence(bellCount));
         
@@ -408,14 +429,15 @@ export function updateHitBonusDisplay(bonus1, bonus2) {
     dom.fightModal.fighter2.hitBonus.textContent = bonus2 > 0 ? `+${bonus2.toFixed(1)} Underdog Bonus` : '';
 }
 
-export function getMajorChampionInfo(fighterName) {
+export function getMajorChampionInfo(fighterName, isDefense = true) {
     if (!fighterName || fighterName === 'Vacant') return null;
+    const prefix = isDefense ? 'The reigning and defending' : 'The reigning';
     if (state.roster.major.undisputed.name === fighterName) {
-        return { type: 'undisputed', speech: 'The Undisputed Champion of the world!' };
+        return { type: 'undisputed', speech: `${prefix} Undisputed Champion of the world!` };
     }
     for (const key of ['heavyweight', 'interGenre', 'cruiserweight', 'featherweight']) {
         if (state.roster.major[key].name === fighterName) {
-            return { type: key, speech: `The reigning and defending world ${key.replace('interGenre','inter-genre')} champion!` };
+            return { type: key, speech: `${prefix} world ${key.replace('interGenre','inter-genre')} champion!` };
         }
     }
     return null;
@@ -955,42 +977,95 @@ export async function handleLoadMatchClick(f1Id, f2Id, titlesJSON) {
     }
 }
 
-export function displayFighterInfoModal(fighterData) {
-    dom.fighterInfoModal.modal.classList.remove('hidden');
-    dom.fighterInfoModal.name.textContent = fighterData.name;
-    const { record, scores, devHouse, publisher, genres } = fighterData;
-    dom.fighterInfoModal.record.textContent = `${record.tko}-${record.ko}-${record.losses}`;
-    dom.fighterInfoModal.weightClass.textContent = getWeightClass(calculateRawScore(fighterData));
-    dom.fighterInfoModal.dev.textContent = devHouse || 'N/A';
-    dom.fighterInfoModal.publisher.textContent = publisher || 'N/A';
-    dom.fighterInfoModal.genres.innerHTML = (genres || []).map(g => `<span class="bg-gray-700 text-xs font-semibold px-2 py-1 rounded-full">${g}</span>`).join('') || 'None listed';
+export function populateAndShowFighterModal(fighter) {
+    if (!fighter) return;
+    state.currentRecordEditTarget = fighter.appId;
 
+    const modal = dom.fighterInfoModal;
+    modal.name.textContent = fighter.name;
+    
+    // --- Populate View State ---
+    modal.recordView.textContent = `${fighter.record.tko}-${fighter.record.ko}-${fighter.record.losses}`;
+    modal.weightClassView.textContent = getWeightClass(calculateRawScore(fighter));
+    modal.devView.textContent = fighter.devHouse || 'N/A';
+    modal.publisherView.textContent = fighter.publisher || 'N/A';
+    modal.genresView.innerHTML = (fighter.genres || []).map(g => `<span class="bg-gray-700 text-xs font-semibold px-2 py-1 rounded-full">${g}</span>`).join('') || 'None listed';
+
+    // --- Populate Edit State ---
+    modal.tkoInput.value = fighter.record.tko || 0;
+    modal.koInput.value = fighter.record.ko || 0;
+    modal.lossesInput.value = fighter.record.losses || 0;
+
+    // --- Populate Title History (for both view and edit) ---
     let historyHtml = '';
-    const currentStatus = getChampionStatus(fighterData.name);
+    const currentStatus = getChampionStatus(fighter.name);
     if (currentStatus.status !== 'contender') {
         const titleKey = currentStatus.status === 'local' ? currentStatus.key : currentStatus.status;
         const titleObj = state.roster.major[titleKey] || state.roster.local[titleKey];
         historyHtml += `<p class="text-green-400">${titleObj.symbol} Current ${titleKey.charAt(0).toUpperCase() + titleKey.slice(1)} Champion</p>`;
+        modal.vacateBtn.classList.remove('hidden');
+    } else {
+        modal.vacateBtn.classList.add('hidden');
     }
 
-    if (fighterData.record.pastTitles) {
-        Object.entries(fighterData.record.pastTitles).forEach(([key, count]) => {
+    if (fighter.record.pastTitles && Object.keys(fighter.record.pastTitles).length > 0) {
+        Object.entries(fighter.record.pastTitles).forEach(([key, count]) => {
             const titleObject = state.roster.major[key] || state.roster.local[key] || {};
             const symbol = titleObject.symbol || PAST_TITLE_SYMBOLS.local;
             historyHtml += `<p>${symbol} Former ${key.charAt(0).toUpperCase() + key.slice(1)} Champion (${count}x)</p>`;
         });
     }
 
-    if (hasAchievedGrandSlam(fighterData)) {
+    if (hasAchievedGrandSlam(fighter)) {
         historyHtml += `<p class="text-amber-400">${GRAND_SLAM_SYMBOL} Grand Slam Winner</p>`;
     }
     
-    if (fighterData.isHallOfFamer) {
+    if (fighter.isHallOfFamer) {
         historyHtml += `<p class="text-amber-400">${HALL_OF_FAME_SYMBOL} Hall of Famer</p>`;
     }
+    modal.titleHistoryView.innerHTML = historyHtml || '<p class="text-gray-500">No title history.</p>';
 
-    dom.fighterInfoModal.titleHistory.innerHTML = historyHtml || '<p class="text-gray-500">No title history.</p>';
+    // Populate the editable title history
+    const editor = modal.titleHistoryEdit;
+    editor.innerHTML = '';
+    const allTitles = {...state.roster.major, ...state.roster.local };
+    Object.keys(allTitles).sort().forEach(key => {
+        const count = fighter.record.pastTitles?.[key] || 0;
+        const formattedName = key.charAt(0).toUpperCase() + key.slice(1).replace('interGenre', 'Inter-Genre');
+        editor.innerHTML += `
+            <div class="flex items-center justify-between">
+                <label class="text-gray-300">${formattedName}</label>
+                <input type="number" value="${count}" data-title-key="${key}" class="form-input w-20 text-center bg-gray-700 border-gray-600 rounded-md py-1 px-1 text-white">
+            </div>
+        `;
+    });
+
+    // Set initial state to "view"
+    setFighterModalState('view');
+    modal.modal.classList.remove('hidden');
 }
+
+
+export function setFighterModalState(mode) {
+    const modal = dom.fighterInfoModal;
+    const isEditMode = mode === 'edit';
+    
+    // Toggle visibility of view/edit containers
+    modal.viewState.classList.toggle('hidden', isEditMode);
+    modal.editState.classList.toggle('hidden', !isEditMode);
+    modal.titleHistoryView.classList.toggle('hidden', isEditMode);
+    modal.titleHistoryEdit.classList.toggle('hidden', !isEditMode);
+
+    // Toggle button visibility
+    modal.editBtn.classList.toggle('hidden', isEditMode);
+    modal.saveBtn.classList.toggle('hidden', !isEditMode);
+    modal.cancelBtn.classList.toggle('hidden', !isEditMode);
+
+    // Keep vacate button visible in both modes if applicable, but hide during edit
+    const isChampion = getChampionStatus(state.universeFighters.find(f => f.appId === state.currentRecordEditTarget)?.name).status !== 'contender';
+    modal.vacateBtn.classList.toggle('hidden', isEditMode || !isChampion);
+}
+
 
 export function retireFighter(fighterId, makeHof) {
     const fighter = state.universeFighters.find(f => f.appId === fighterId);
@@ -1002,17 +1077,7 @@ export function retireFighter(fighterId, makeHof) {
                     fighter.isRetired = true;
                     fighter.isHallOfFamer = makeHof;
                     updateTimestamp(fighter);
-                    // If they are a current champion, vacate the title
-                    Object.keys(state.roster.major).forEach(key => {
-                        if (state.roster.major[key].name === fighter.name) {
-                            state.roster.major[key] = { ...state.roster.major[key], name: 'Vacant', data: null };
-                        }
-                    });
-                    Object.keys(state.roster.local).forEach(key => {
-                        if (state.roster.local[key].name === fighter.name) {
-                            state.roster.local[key] = { ...state.roster.local[key], name: 'Vacant', data: null };
-                        }
-                    });
+                    vacateAllTitles(fighter.name);
                     saveUniverseToLocalStorage();
                     populateSetupPanel();
                     updateChampionsDisplay();
@@ -1111,31 +1176,4 @@ export function clearForNextRound() {
     state.boutWinnerData = null;
     updateScoresAndDisplay();
 }
-
-export function populateAndShowEditModal(fighter) {
-    if (!fighter) return;
-    state.currentRecordEditTarget = fighter.appId; // Use appId to be safe
-    dom.editRecordModal.tko.value = fighter.record.tko || 0;
-    dom.editRecordModal.ko.value = fighter.record.ko || 0;
-    dom.editRecordModal.losses.value = fighter.record.losses || 0;
-    
-    const editor = dom.editRecordModal.pastTitlesEditor;
-    editor.innerHTML = '';
-    const allTitles = {...state.roster.major, ...state.roster.local };
-    
-    Object.keys(allTitles).sort().forEach(key => {
-        const count = fighter.record.pastTitles?.[key] || 0;
-        const formattedName = key.charAt(0).toUpperCase() + key.slice(1).replace('interGenre', 'Inter-Genre');
-        editor.innerHTML += `
-            <div class="flex items-center justify-between">
-                <label class="text-gray-300">${formattedName}</label>
-                <input type="number" value="${count}" data-title-key="${key}" class="form-input w-20 text-center bg-gray-700 border-gray-600 rounded-md py-1 px-1 text-white">
-            </div>
-        `;
-    });
-
-
-    dom.editRecordModal.modal.classList.remove('hidden');
-}
-
 

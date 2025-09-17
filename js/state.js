@@ -1,4 +1,4 @@
-import { showToast, populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, displayFighterInfoModal, retireFighter, openGenreExpansionModal, openTop100Selection, populateAndShowEditModal, clearForNextRound, loadCardFromData, clearCard, clearBothCards, updateTitleMatchAnnouncement } from './ui.js';
+import { showToast, populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, populateAndShowFighterModal, retireFighter, openGenreExpansionModal, openTop100Selection, clearForNextRound, loadCardFromData, clearCard, clearBothCards, setFighterModalState } from './ui.js';
 import { fetchSteamData, updateScoresOnly, fetchAndAddSingleFighter, populateUniverseFromSteamIds } from './api.js';
 import { startFight } from './fight.js';
 import { downloadJSON, triggerFileUpload } from './utils.js';
@@ -52,17 +52,6 @@ export function initializeApp() {
 }
 
 // --- STATE FUNCTIONS ---
-
-/**
- * Sets the selected title for an upcoming fight and updates the UI.
- * @param {string} title - The key of the title to be contested (e.g., 'heavyweight', 'undisputed', or 'none').
- */
-export function setSelectedTitle(title) {
-    state.selectedTitleForFight = title;
-    updateTitleMatchAnnouncement();
-}
-
-
 export function createNewFighter() {
     return {
         name: '', devHouse: '', publisher: '',
@@ -91,6 +80,11 @@ export function updateFighterInUniverse(fighterData) {
         state.universeFighters[index] = { ...state.universeFighters[index], ...JSON.parse(JSON.stringify(fighterData)) };
     }
     saveUniverseToLocalStorage();
+}
+
+export function setSelectedTitle(title) {
+    state.selectedTitleForFight = title;
+    import('./ui.js').then(ui => ui.updateTitleMatchAnnouncement());
 }
 
 // --- SAVE & LOAD ---
@@ -207,7 +201,7 @@ function selectDOMElements() {
             boxScoreContainer: document.getElementById('box-score-container'),
             log: document.getElementById('fight-log'), disableDelayCheckbox: document.getElementById('disable-delay-checkbox'), returnBtn: document.getElementById('return-to-main-btn'), },
         setupPanel: { panel: document.getElementById('setup-panel'), rosterStatus: document.getElementById('roster-status'), closeBtn: document.getElementById('close-setup-btn'), championList: document.getElementById('champion-list'), localChampionList: document.getElementById('local-champion-list'), universeFighterList: document.getElementById('universe-fighter-list'), applyBtn: document.getElementById('apply-roster-changes-btn'), addFighterIdInput: document.getElementById('add-fighter-steam-id'), addFighterBtn: document.getElementById('add-fighter-btn'), exportBtn: document.getElementById('export-roster-btn'), potentialMatchupsList: document.getElementById('potential-matchups-list'), potentialTitlesList: document.getElementById('potential-titles-list'), retirementSelect: document.getElementById('retirement-fighter-select'), retireForgottenBtn: document.getElementById('retire-forgotten-btn'), retireHofBtn: document.getElementById('retire-hof-btn'), hallOfFameList: document.getElementById('hall-of-fame-list'), untappedGenresList: document.getElementById('untapped-genres-list'), tappedGenresList: document.getElementById('tapped-genres-list') },
-        editRecordModal: { modal: document.getElementById('edit-record-modal'), tko: document.getElementById('record-tko'), ko: document.getElementById('record-ko'), losses: document.getElementById('record-losses'), pastTitlesEditor: document.getElementById('past-titles-editor'), saveBtn: document.getElementById('save-record-btn'), cancelBtn: document.getElementById('cancel-record-btn') },
+        fighterInfoModal: { modal: document.getElementById('fighter-info-modal'), name: document.getElementById('info-modal-name'), recordView: document.getElementById('info-modal-record-view'), weightClassView: document.getElementById('info-modal-weight-class-view'), devView: document.getElementById('info-modal-dev-view'), publisherView: document.getElementById('info-modal-publisher-view'), genresView: document.getElementById('info-modal-genres-view'), titleHistoryView: document.getElementById('info-modal-title-history'), viewState: document.getElementById('info-modal-view-state'), editState: document.getElementById('info-modal-edit-state'), tkoInput: document.getElementById('record-tko'), koInput: document.getElementById('record-ko'), lossesInput: document.getElementById('record-losses'), titleHistoryEdit: document.getElementById('info-modal-title-history-edit'), closeBtn: document.getElementById('info-modal-close-btn'), editBtn: document.getElementById('info-modal-edit-btn'), saveBtn: document.getElementById('info-modal-save-btn'), cancelBtn: document.getElementById('info-modal-cancel-btn'), vacateBtn: document.getElementById('info-modal-vacate-btn') },
         titleSelectModal: { modal: document.getElementById('title-select-modal'), optionsContainer: document.getElementById('title-options-container'), confirmBtn: document.getElementById('confirm-title-select-btn'), cancelBtn: document.getElementById('cancel-title-select-btn'), },
         helpModal: { modal: document.getElementById('help-modal'), closeBtn: document.getElementById('close-help-btn'), closeBtnBottom: document.getElementById('close-help-btn-bottom') },
         universeSetupModal: { modal: document.getElementById('universe-setup-modal'), idsInput: document.getElementById('steam-ids-input'), singleIdInput: document.getElementById('single-steam-id-input'), addSingleIdBtn: document.getElementById('add-single-steam-id-btn'), error: document.getElementById('universe-setup-error'), startBtn: document.getElementById('start-universe-btn'), importBtn: document.getElementById('import-universe-btn'), loadPresetBtn: document.getElementById('load-preset-universe-btn'), selectTop100Btn: document.getElementById('select-top-100-btn') },
@@ -216,7 +210,6 @@ function selectDOMElements() {
         genreExpansionModal: { modal: document.getElementById('genre-expansion-modal'), title: document.getElementById('genre-expansion-title'), list: document.getElementById('genre-expansion-list'), status: document.getElementById('genre-expansion-status'), cancelBtn: document.getElementById('cancel-genre-expansion-btn'), confirmBtn: document.getElementById('confirm-genre-expansion-btn') },
         toast: { container: document.getElementById('toast-notification'), message: document.getElementById('toast-message') },
         confirmationModal: { modal: document.getElementById('confirmation-modal'), title: document.getElementById('confirmation-title'), message: document.getElementById('confirmation-message'), confirmBtn: document.getElementById('confirm-action-btn'), cancelBtn: document.getElementById('confirm-cancel-btn') },
-        fighterInfoModal: { modal: document.getElementById('fighter-info-modal'), name: document.getElementById('info-modal-name'), record: document.getElementById('info-modal-record'), weightClass: document.getElementById('info-modal-weight-class'), dev: document.getElementById('info-modal-dev'), publisher: document.getElementById('info-modal-publisher'), genres: document.getElementById('info-modal-genres'), titleHistory: document.getElementById('info-modal-title-history'), closeBtn: document.getElementById('close-info-modal-btn') }
     });
 }
 
@@ -257,9 +250,7 @@ export function attachEventListeners() {
     
     dom.titleSelectModal.confirmBtn.addEventListener('click', () => { 
         const selectedOption = document.querySelector('input[name="title-option"]:checked'); 
-        if (selectedOption) {
-            setSelectedTitle(selectedOption.value);
-        }
+        if (selectedOption) setSelectedTitle(selectedOption.value);
         updateScoresAndDisplay(); 
         dom.titleSelectModal.modal.classList.add('hidden'); 
     });
@@ -282,19 +273,23 @@ export function attachEventListeners() {
     dom.cards.item1.importBtn.addEventListener('click', () => triggerFileUpload((data) => { loadCardFromData('item1', data); updateScoresAndDisplay(); }, '.btr'));
     dom.cards.item2.importBtn.addEventListener('click', () => triggerFileUpload((data) => { loadCardFromData('item2', data); updateScoresAndDisplay(); }, '.btr'));
 
-    dom.cards.item1.editRecordBtn.addEventListener('click', () => { if(state.fighter1.appId) populateAndShowEditModal(state.fighter1) });
-    dom.cards.item2.editRecordBtn.addEventListener('click', () => { if(state.fighter2.appId) populateAndShowEditModal(state.fighter2) });
+    dom.cards.item1.editRecordBtn.addEventListener('click', () => { if(state.fighter1.appId) populateAndShowFighterModal(state.fighter1) });
+    dom.cards.item2.editRecordBtn.addEventListener('click', () => { if(state.fighter2.appId) populateAndShowFighterModal(state.fighter2) });
     
-    dom.editRecordModal.saveBtn.addEventListener('click', () => { 
+    dom.fighterInfoModal.editBtn.addEventListener('click', () => setFighterModalState('edit'));
+    dom.fighterInfoModal.cancelBtn.addEventListener('click', () => setFighterModalState('view'));
+    dom.fighterInfoModal.closeBtn.addEventListener('click', () => dom.fighterInfoModal.modal.classList.add('hidden'));
+
+    dom.fighterInfoModal.saveBtn.addEventListener('click', () => { 
         const fighter = state.universeFighters.find(f => f.appId === state.currentRecordEditTarget);
         if (!fighter) return;
 
-        fighter.record.tko = parseInt(dom.editRecordModal.tko.value, 10) || 0; 
-        fighter.record.ko = parseInt(dom.editRecordModal.ko.value, 10) || 0; 
-        fighter.record.losses = parseInt(dom.editRecordModal.losses.value, 10) || 0; 
+        fighter.record.tko = parseInt(dom.fighterInfoModal.tkoInput.value, 10) || 0; 
+        fighter.record.ko = parseInt(dom.fighterInfoModal.koInput.value, 10) || 0; 
+        fighter.record.losses = parseInt(dom.fighterInfoModal.lossesInput.value, 10) || 0; 
         
         const pastTitles = {}; 
-        dom.editRecordModal.pastTitlesEditor.querySelectorAll('input[data-title-key]').forEach(input => { 
+        dom.fighterInfoModal.titleHistoryEdit.querySelectorAll('input[data-title-key]').forEach(input => { 
             const count = parseInt(input.value, 10) || 0; 
             if (count > 0) pastTitles[input.dataset.titleKey] = count; 
         }); 
@@ -303,15 +298,14 @@ export function attachEventListeners() {
         updateTimestamp(fighter);
         updateFighterInUniverse(fighter); 
 
-        // Also update the fighter if it's currently loaded in a card
         if (state.fighter1.appId === fighter.appId) loadCardFromData('item1', fighter);
         if (state.fighter2.appId === fighter.appId) loadCardFromData('item2', fighter);
         
-        import('./ui.js').then(ui => ui.updateRecordDisplays()); 
+        updateRecordDisplays(); 
         updateScoresAndDisplay(); 
-        dom.editRecordModal.modal.classList.add('hidden'); 
+        setFighterModalState('view'); // Go back to view mode
+        populateAndShowFighterModal(fighter); // Re-populate with saved data
     });
-    dom.editRecordModal.cancelBtn.addEventListener('click', () => dom.editRecordModal.modal.classList.add('hidden'));
     
     dom.triggers.help.addEventListener('click', () => dom.helpModal.modal.classList.remove('hidden'));
     dom.helpModal.closeBtn.addEventListener('click', () => dom.helpModal.modal.classList.add('hidden'));
@@ -455,8 +449,6 @@ export function attachEventListeners() {
         if(selectedId) retireFighter(selectedId, true);
     });
 
-    dom.fighterInfoModal.closeBtn.addEventListener('click', () => dom.fighterInfoModal.modal.classList.add('hidden'));
-
     // Global click listener for dynamically added buttons
     document.addEventListener('click', function(event) {
         if (event.target.closest('.load-match-btn')) {
@@ -471,15 +463,16 @@ export function attachEventListeners() {
             const currentTitle = infoSpan.title;
             const currentText = infoSpan.textContent;
             infoSpan.title = currentText;
-            infoSpan.textContent = currentText;
+            infoSpan.textContent = currentTitle;
         } else if (event.target.closest('.universe-fighter-entry')) {
             const fighterEntry = event.target.closest('.universe-fighter-entry');
             if (event.target.closest('button')) return; // Ignore clicks on buttons inside the entry
             const appId = fighterEntry.dataset.appid;
             const fighterData = state.universeFighters.find(f => f.appId === appId);
             if (fighterData) {
-                displayFighterInfoModal(fighterData);
+                populateAndShowFighterModal(fighterData);
             }
         }
     });
 }
+
