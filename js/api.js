@@ -1,5 +1,5 @@
 import { state, dom, createNewFighter, updateTimestamp, addFighterToUniverse, updateFighterInUniverse } from './state.js';
-import { updateUIAfterFetch, updateScoresAndDisplay, showToast, showOriginLockoutModal } from './ui.js';
+import { updateUIAfterFetch, updateScoresAndDisplay, showToast, showOriginLockoutModal, populateUniverseSelectors } from './ui.js';
 import { delay } from './utils.js';
 
 const initialProxies = [
@@ -7,53 +7,33 @@ const initialProxies = [
     'https://api.allorigins.win/get?url=',
     'https://corsproxy.io/?',
     'https://proxy.cors.sh/',
-    'https://cors.bridged.cc/',
-    'https://worker-proxy.priver.dev/?url=',
+    //'https://cors.bridged.cc/', // Often unreliable
+    //'https://worker-proxy.priver.dev/?url=', // Often unreliable
     'https://api.codetabs.com/v1/proxy?quest=',
-    'https://cors-proxy.priver.dev/'
+    //'https://cors-proxy.priver.dev/' // Often unreliable
 ];
 
-export async function fetchWithProxyRotation(appId) {
+export async function fetchWithProxyRotation(apiUrl) {
     if (initialProxies.length === 0) {
         console.error("No proxies available.");
         return null;
     }
 
     for (const proxyUrl of initialProxies) {
-        const reviewsApiUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=english`;
-        const detailsApiUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}`;
-        
-        const proxyUrlReviews = proxyUrl.includes('?') ? `${proxyUrl}${encodeURIComponent(reviewsApiUrl)}` : `${proxyUrl}${reviewsApiUrl}`;
-        const proxyUrlDetails = proxyUrl.includes('?') ? `${proxyUrl}${encodeURIComponent(detailsApiUrl)}` : `${proxyUrl}${detailsApiUrl}`;
-
+        const fullUrl = proxyUrl.includes('?') ? `${proxyUrl}${encodeURIComponent(apiUrl)}` : `${proxyUrl}${apiUrl}`;
         try {
-            const [reviewsResponse, detailsResponse] = await Promise.all([
-                fetch(proxyUrlReviews),
-                fetch(proxyUrlDetails)
-            ]);
-
-            if (!reviewsResponse.ok || !detailsResponse.ok) throw new Error(`Network response not ok from proxy: ${proxyUrl}, Status: ${reviewsResponse.status}/${detailsResponse.status}`);
+            const response = await fetch(fullUrl);
+            if (!response.ok) throw new Error(`Network response not ok from proxy: ${proxyUrl}, Status: ${response.status}`);
             
-            const reviewsText = await reviewsResponse.text();
-            const detailsText = await detailsResponse.text();
-            
-            const steamReviews = reviewsText.includes('"contents":') ? JSON.parse(reviewsText).contents : reviewsText;
-            const steamDetails = detailsText.includes('"contents":') ? JSON.parse(detailsText).contents : detailsText;
-
-            const parsedReviews = JSON.parse(steamReviews);
-            const parsedDetails = JSON.parse(steamDetails);
-
-            if (parsedReviews.success && parsedDetails[appId] && parsedDetails[appId].success) {
-                console.log(`SUCCESS with AppID ${appId} using proxy ${proxyUrl}`);
-                return { steamReviews: parsedReviews, steamDetails: parsedDetails };
-            } else {
-                throw new Error(`API success flag was false for AppID ${appId}`);
-            }
+            const text = await response.text();
+            // Handle proxies that wrap the response in a 'contents' key
+            const jsonData = text.includes('"contents":') ? JSON.parse(text).contents : text;
+            return JSON.parse(jsonData); // Return the parsed JSON directly
         } catch (error) {
-            console.warn(`FAILED with AppID ${appId} using proxy ${proxyUrl}. Error:`, error.message);
+            console.warn(`FAILED with API URL using proxy ${proxyUrl}. Error:`, error.message);
         }
     }
-    console.error(`All proxies failed for AppID ${appId}`);
+    console.error(`All proxies failed for API URL`);
     return null;
 }
 
@@ -69,8 +49,10 @@ export async function fetchSteamData(appId, cardPrefix) {
     }
 
     if (fighter.steamData) {
-        clearCard(cardPrefix);
-        updateScoresAndDisplay();
+        import('./ui.js').then(ui => {
+            ui.clearCard(cardPrefix);
+            updateScoresAndDisplay();
+        });
         return;
     }
 
@@ -84,13 +66,20 @@ export async function fetchSteamData(appId, cardPrefix) {
     card.fetchSteamBtn.textContent = 'Fetching...';
     card.fetchSteamBtn.disabled = true;
 
-    const data = await fetchWithProxyRotation(appId);
+    const reviewsUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=english`;
+    const detailsUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}`;
+    
+    const [reviewsData, detailsData] = await Promise.all([
+        fetchWithProxyRotation(reviewsUrl),
+        fetchWithProxyRotation(detailsUrl)
+    ]);
 
-    if (data) {
+
+    if (reviewsData && reviewsData.success && detailsData && detailsData[appId] && detailsData[appId].success) {
         fighter.appId = appId;
-        fighter.steamData = data.steamReviews.query_summary; 
+        fighter.steamData = reviewsData.query_summary; 
         
-        const appDetails = data.steamDetails[appId].data;
+        const appDetails = detailsData[appId].data;
         fighter.name = appDetails?.name || `Game ${appId}`;
         fighter.devHouse = appDetails?.developers?.[0] || '';
         fighter.publisher = appDetails?.publishers?.[0] || '';
@@ -128,11 +117,18 @@ export async function updateScoresOnly(appId, cardPrefix) {
     card.updateScoresBtn.textContent = 'Updating...';
     card.updateScoresBtn.disabled = true;
 
-    const data = await fetchWithProxyRotation(appId);
+    const reviewsUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=english`;
+    const detailsUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}`;
 
-    if (data) {
-        fighter.steamData = data.steamReviews.query_summary; 
-        const appDetails = data.steamDetails[appId].data;
+    const [reviewsData, detailsData] = await Promise.all([
+        fetchWithProxyRotation(reviewsUrl),
+        fetchWithProxyRotation(detailsUrl)
+    ]);
+
+
+    if (reviewsData && reviewsData.success && detailsData && detailsData[appId] && detailsData[appId].success) {
+        fighter.steamData = reviewsData.query_summary; 
+        const appDetails = detailsData[appId].data;
         if (appDetails?.metacritic?.score) {
             fighter.scores.metacritic = appDetails.metacritic.score.toString();
         } else {
@@ -168,13 +164,20 @@ export async function fetchAndAddSingleFighter(appId) {
     btn.textContent = '...';
     statusEl.textContent = `Fetching ${appId}...`;
     
-    const data = await fetchWithProxyRotation(appId);
-    if (data) {
+    const reviewsUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=english`;
+    const detailsUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}`;
+    
+    const [reviewsData, detailsData] = await Promise.all([
+        fetchWithProxyRotation(reviewsUrl),
+        fetchWithProxyRotation(detailsUrl)
+    ]);
+
+    if (reviewsData && reviewsData.success && detailsData && detailsData[appId] && detailsData[appId].success) {
         const newFighter = createNewFighter();
-        const appDetails = data.steamDetails[appId].data;
+        const appDetails = detailsData[appId].data;
         
         newFighter.appId = appId;
-        newFighter.steamData = data.steamReviews.query_summary;
+        newFighter.steamData = reviewsData.query_summary;
         newFighter.name = appDetails?.name || `Game ${appId}`;
         newFighter.devHouse = appDetails?.developers?.[0] || '';
         newFighter.publisher = appDetails?.publishers?.[0] || '';
@@ -197,3 +200,93 @@ export async function fetchAndAddSingleFighter(appId) {
     btn.textContent = 'Add Fighter';
 }
 
+export async function populateUniverseFromSteamIds(ids) {
+    const btn = dom.universeSetupModal.startBtn;
+    const errorEl = dom.universeSetupModal.error;
+    const lockedOrigins = new Set();
+    let currentIdIndex = 0;
+    let universeCount = 0;
+
+    btn.disabled = true;
+    btn.textContent = 'Populating...';
+
+    // Prefill locked origins from existing universe
+    state.universeFighters.forEach(f => {
+        if (f.devHouse) lockedOrigins.add(f.devHouse);
+        if (f.publisher) lockedOrigins.add(f.publisher);
+    });
+
+    while (currentIdIndex < ids.length) {
+        const appId = ids[currentIdIndex];
+        errorEl.textContent = `Processing fighter ${currentIdIndex + 1} of ${ids.length}...`;
+        currentIdIndex++;
+        
+        // Skip if already in universe
+        if (state.universeFighters.some(f => f.appId === appId)) {
+            continue;
+        }
+
+        const reviewsUrl = `https://store.steampowered.com/appreviews/${appId}?json=1&language=english`;
+        const detailsUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}`;
+        const [reviewsData, detailsData] = await Promise.all([
+            fetchWithProxyRotation(reviewsUrl),
+            fetchWithProxyRotation(detailsUrl)
+        ]);
+
+        if (reviewsData && reviewsData.success && detailsData && detailsData[appId] && detailsData[appId].success) {
+            const newFighter = createNewFighter();
+            const appDetails = detailsData[appId].data;
+            
+            newFighter.appId = appId;
+            newFighter.steamData = reviewsData.query_summary;
+            newFighter.name = appDetails?.name || `Game ${appId}`;
+            newFighter.devHouse = appDetails?.developers?.[0] || '';
+            newFighter.publisher = appDetails?.publishers?.[0] || '';
+            newFighter.genres = appDetails?.genres?.map(g => g.description.toLowerCase()) || [];
+            if (appDetails?.metacritic?.score) {
+                newFighter.scores.metacritic = appDetails.metacritic.score.toString();
+            } else {
+                newFighter.scores.metacritic = '404';
+            }
+            updateTimestamp(newFighter);
+
+            const dev = newFighter.devHouse;
+            const pub = newFighter.publisher;
+            let conflict = false;
+            let conflictingOrigin = '';
+
+            if (dev && lockedOrigins.has(dev)) {
+                conflict = true;
+                conflictingOrigin = dev;
+            } else if (pub && pub !== dev && lockedOrigins.has(pub)) {
+                conflict = true;
+                conflictingOrigin = pub;
+            }
+
+            if (conflict) {
+                const existingFighter = state.universeFighters.find(f => f.devHouse === conflictingOrigin || f.publisher === conflictingOrigin);
+                const existingFighterName = existingFighter ? existingFighter.name : 'a previous fighter';
+                
+                const decision = await showOriginLockoutModal(newFighter.name, existingFighterName, conflictingOrigin);
+
+                if (decision === 'skip') {
+                    errorEl.textContent = `Skipping ${newFighter.name}...`;
+                    await delay(1500);
+                    continue; 
+                }
+            }
+            
+            if (dev) lockedOrigins.add(dev);
+            if (pub) lockedOrigins.add(pub);
+            
+            addFighterToUniverse(newFighter);
+            universeCount++;
+        }
+        await delay(200);
+    }
+
+    populateUniverseSelectors();
+    import('./state.js').then(stateModule => stateModule.processUniverseForNewTitles());
+    dom.universeSetupModal.modal.classList.add('hidden');
+    import('./state.js').then(stateModule => stateModule.saveUniverseToLocalStorage());
+}

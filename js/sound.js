@@ -1,3 +1,4 @@
+import { dom } from './state.js';
 import { delay } from './utils.js';
 
 let audioCtx;

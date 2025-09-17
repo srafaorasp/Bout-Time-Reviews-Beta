@@ -43,12 +43,10 @@ export function triggerFileUpload(callback, extension) {
                 callback(data);
             } catch (err) {
                 console.error(`Error parsing imported ${extension} file:`, err);
-                // In a modular setup, UI feedback should be handled by a dedicated UI function.
-                // For now, we'll just log the error.
+                import('./ui.js').then(ui => ui.showToast(`Error: Could not read the file. Please check format.`, 5000));
             }
         };
         reader.readAsText(file);
     };
     input.click();
 }
-

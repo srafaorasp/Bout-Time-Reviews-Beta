@@ -126,4 +126,3 @@
     50% { transform: translateY(-5px); }
 }
 .ref-counting #ref-arm-left { animation: ref-counting 1s infinite ease-in-out; transform-origin: top left; }
-
