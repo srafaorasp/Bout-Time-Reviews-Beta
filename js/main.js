@@ -2,8 +2,9 @@ import { initializeApp, attachEventListeners } from './state.js';
 import { initAudio } from './sound.js';
 
 // --- INITIALIZATION ---
+// We wrap the main logic in an async function to use await for fetching modals.
 document.addEventListener('DOMContentLoaded', async () => {
-    // Fetch and inject modals first
+    // 1. Fetch and inject modals first. This is crucial.
     try {
         const response = await fetch('modals.html');
         if (!response.ok) {
@@ -14,22 +15,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (modalContainer) {
             modalContainer.innerHTML = modalHTML;
         } else {
-            // If the container isn't found, append to body as a fallback.
+            console.error('Modal container not found! Appending to body as a fallback.');
             document.body.insertAdjacentHTML('beforeend', modalHTML);
         }
     } catch (error) {
         console.error('Failed to load modals:', error);
-        // Optionally, display an error to the user that core UI components failed to load
+        // Display a critical error to the user if UI components can't be loaded.
         document.body.innerHTML = '<div class="text-red-500 text-center p-8">Critical Error: Could not load UI components. Please refresh the page.</div>';
         return; // Stop execution if modals fail to load
     }
     
-    // Now that the DOM is complete (including modals), initialize the app
+    // 2. Now that the DOM is complete (including injected modals), initialize the app.
+    // This resolves the race condition.
     initializeApp();
     attachEventListeners();
 
-    // Initialize audio on the first user interaction
-    const initAudioOnce = () => initAudio();
+    // 3. Initialize audio context on the first user interaction to comply with browser policies.
+    const initAudioOnce = () => {
+        initAudio();
+        // Remove the listeners after the first interaction.
+        document.body.removeEventListener('click', initAudioOnce);
+        document.body.removeEventListener('keydown', initAudioOnce);
+    };
     document.body.addEventListener('click', initAudioOnce, { once: true });
     document.body.addEventListener('keydown', initAudioOnce, { once: true });
 });

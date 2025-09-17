@@ -1,4 +1,4 @@
-import { state, dom, createNewFighter, updateFighterInUniverse, saveUniverseToLocalStorage, GENRE_SYMBOLS, PAST_TITLE_SYMBOLS, GRAND_SLAM_SYMBOL, HALL_OF_FAME_SYMBOL, addFighterToUniverse, loadRoster, updateTimestamp } from './state.js';
+import { state, dom, createNewFighter, updateFighterInUniverse, saveUniverseToLocalStorage, GENRE_SYMBOLS, PAST_TITLE_SYMBOLS, GRAND_SLAM_SYMBOL, HALL_OF_FAME_SYMBOL, addFighterToUniverse, loadRoster, updateTimestamp, setSelectedTitle } from './state.js';
 import { calculateRawScore, applyBonuses, getWeightClass } from './fight.js';
 import { downloadJSON } from './utils.js';
 import { fetchWithProxyRotation, STEAMSPY_API_URL } from './api.js';
@@ -259,6 +259,46 @@ export function logFightMessage(html) {
 
 
 // --- HELPER & ADDITIONAL UI FUNCTIONS ---
+function getFighterTitleInfo(name) {
+    if (!name || name === '' || name === 'Vacant') return null;
+    
+    const majorChampInfo = getMajorChampionInfo(name);
+    if (majorChampInfo) {
+        let titleText = '';
+        switch(majorChampInfo.type) {
+            case 'undisputed': titleText = 'Undisputed Champ'; break;
+            case 'interGenre': titleText = 'Inter-Genre Champ'; break;
+            case 'heavyweight': titleText = 'Heavyweight Champ'; break;
+            case 'cruiserweight': titleText = 'Cruiserweight Champ'; break;
+            case 'featherweight': titleText = 'Featherweight Champ'; break;
+            default: titleText = 'Major Champion';
+        }
+        return { symbol: state.roster.major[majorChampInfo.type].symbol, title: titleText };
+    }
+
+    const localChampInfo = getLocalChampionInfo(name);
+    if (localChampInfo) {
+        const titleText = `${localChampInfo.key.charAt(0).toUpperCase() + localChampInfo.key.slice(1)} Champ`;
+        return { symbol: localChampInfo.symbol, title: titleText };
+    }
+    
+    return null;
+}
+
+function getPastTitleSymbol(fighter) {
+    const pastTitles = fighter.record.pastTitles || {};
+    if (pastTitles.undisputed) {
+        return PAST_TITLE_SYMBOLS.undisputed;
+    }
+    const majorKeys = ['heavyweight', 'cruiserweight', 'featherweight', 'interGenre'];
+    if (majorKeys.some(key => pastTitles[key])) {
+        return PAST_TITLE_SYMBOLS.major;
+    }
+    if (Object.keys(pastTitles).some(key => state.roster.local[key])) {
+         return PAST_TITLE_SYMBOLS.local;
+    }
+    return '';
+}
 
 export function getChampionStatus(fighterName) {
     if (!fighterName || fighterName === 'Vacant') return { status: 'contender' };
@@ -345,7 +385,7 @@ export function getLocalChampionInfo(fighterName) {
     if (!fighterName || fighterName === 'Vacant') return null;
     for (const key in state.roster.local) {
         if (state.roster.local[key].name === fighterName) {
-            return { key: key };
+            return { key: key , symbol: state.roster.local[key].symbol };
         }
     }
     return null;
@@ -449,7 +489,7 @@ function updateTitleAvailability() {
     }
 }
 
-function updateTitleMatchAnnouncement() {
+export function updateTitleMatchAnnouncement() {
      if (state.selectedTitleForFight !== 'none') {
         const titleKey = state.selectedTitleForFight;
         const titleObject = state.roster.major[titleKey] || state.roster.local[titleKey];
@@ -490,9 +530,25 @@ export function populateUniverseSelectors() {
 
     fighters.forEach(fighter => {
         if (!fighter.isRetired) {
-            const option = `<option value="${fighter.appId}">${fighter.name}</option>`;
-            select1.insertAdjacentHTML('beforeend', option);
-            select2.insertAdjacentHTML('beforeend', option);
+            let prefix = '';
+            if (fighter.isHallOfFamer) {
+                prefix += `${HALL_OF_FAME_SYMBOL} `;
+            }
+            if(hasAchievedGrandSlam(fighter)) {
+                prefix += `${GRAND_SLAM_SYMBOL} `;
+            }
+            const currentTitleInfo = getFighterTitleInfo(fighter.name);
+            if (currentTitleInfo) {
+                prefix = `${currentTitleInfo.symbol} ` + prefix;
+            } else {
+                const pastTitleSymbol = getPastTitleSymbol(fighter);
+                if (pastTitleSymbol) {
+                    prefix = `${pastTitleSymbol} ` + prefix;
+                }
+            }
+            const optionHTML = `<option value="${fighter.appId}">${prefix}${fighter.name}</option>`;
+            select1.insertAdjacentHTML('beforeend', optionHTML);
+            select2.insertAdjacentHTML('beforeend', optionHTML);
         }
     });
 
@@ -515,135 +571,146 @@ export function updateChampionsDisplay() {
 }
 
 export function populateSetupPanel() {
-    const { championList, localChampionList, universeFighterList, potentialMatchupsList, potentialTitlesList, retirementSelect, hallOfFameList, untappedGenresList, tappedGenresList } = dom.setupPanel;
+    const { potentialMatchupsList, potentialTitlesList, ...panel } = dom.setupPanel;
     
-    // 1. Clear existing content
-    championList.innerHTML = '';
-    localChampionList.innerHTML = '';
-    universeFighterList.innerHTML = '';
-    potentialMatchupsList.innerHTML = '';
-    potentialTitlesList.innerHTML = '';
-    retirementSelect.innerHTML = '';
-    hallOfFameList.innerHTML = '';
-    untappedGenresList.innerHTML = '';
-    tappedGenresList.innerHTML = '';
+    // Clear and populate static parts of the panel
+    panel.championList.innerHTML = '';
+    panel.localChampionList.innerHTML = '';
+    panel.universeFighterList.innerHTML = '';
+    panel.retirementSelect.innerHTML = '<option value="">Select Fighter to Retire</option>';
+    panel.hallOfFameList.innerHTML = '';
+    panel.untappedGenresList.innerHTML = '';
+    panel.tappedGenresList.innerHTML = '';
 
     const sortedFighters = [...state.universeFighters].sort((a, b) => a.name.localeCompare(b.name));
 
-    // 2. Populate Major Champions
     Object.entries(state.roster.major).forEach(([key, title]) => {
         const titleName = key.charAt(0).toUpperCase() + key.slice(1).replace('interGenre', 'Inter-Genre');
-        championList.innerHTML += `
-            <div class="flex items-center justify-between bg-gray-900 p-1 rounded">
-                <span class="font-semibold">${title.symbol} ${titleName}:</span>
-                <span class="truncate" title="${title.name}">${title.name}</span>
-            </div>`;
+        panel.championList.innerHTML += `<div class="flex items-center justify-between bg-gray-900 p-1 rounded"><span class="font-semibold">${title.symbol} ${titleName}:</span><span class="truncate" title="${title.name}">${title.name}</span></div>`;
     });
 
-    // 3. Populate Local Champions
     if (Object.keys(state.roster.local).length > 0) {
         Object.entries(state.roster.local).forEach(([key, title]) => {
             const titleName = key.charAt(0).toUpperCase() + key.slice(1);
-            localChampionList.innerHTML += `
-                <div class="flex items-center justify-between bg-gray-900 p-1 rounded">
-                    <span class="font-semibold">${title.symbol} ${titleName}:</span>
-                    <span class="truncate" title="${title.name}">${title.name}</span>
-                </div>`;
+            panel.localChampionList.innerHTML += `<div class="flex items-center justify-between bg-gray-900 p-1 rounded"><span class="font-semibold">${title.symbol} ${titleName}:</span><span class="truncate" title="${title.name}">${title.name}</span></div>`;
         });
     } else {
-        localChampionList.innerHTML = `<p class="text-center text-gray-500 text-xs">No local titles exist yet.</p>`;
+        panel.localChampionList.innerHTML = `<p class="text-center text-gray-500 text-xs">No local titles exist yet.</p>`;
     }
 
-    // 4. Populate Universe Fighters & Retirement Select & HOF
-    const activeFighters = [];
-    sortedFighters.forEach(fighter => {
-        if (fighter.isRetired) {
-            if (fighter.isHallOfFamer) {
-                hallOfFameList.innerHTML += `<div class="bg-gray-900 p-1 rounded truncate text-amber-400 flex justify-between items-center">${HALL_OF_FAME_SYMBOL} ${fighter.name} <button data-appid="${fighter.appId}" class="reactivate-btn bg-green-700 hover:bg-green-600 px-2 py-0.5 rounded text-white text-xs">Reactivate</button></div>`;
-            }
-        } else {
-            activeFighters.push(fighter);
-            universeFighterList.innerHTML += `<div class="universe-fighter-entry cursor-pointer hover:bg-gray-700 p-1 rounded" data-appid="${fighter.appId}">${fighter.name}</div>`;
-            retirementSelect.innerHTML += `<option value="${fighter.appId}">${fighter.name}</option>`;
-        }
+    const activeFighters = sortedFighters.filter(f => !f.isRetired);
+    activeFighters.forEach(fighter => {
+        panel.universeFighterList.innerHTML += `<div class="universe-fighter-entry cursor-pointer hover:bg-gray-700 p-1 rounded" data-appid="${fighter.appId}">${fighter.name}</div>`;
+        panel.retirementSelect.innerHTML += `<option value="${fighter.appId}">${fighter.name}</option>`;
     });
 
-    if (hallOfFameList.innerHTML === '') {
-        hallOfFameList.innerHTML = `<p class="text-center text-gray-500 text-xs">The Hall of Fame awaits its first inductee.</p>`;
+    const hallOfFamers = sortedFighters.filter(f => f.isHallOfFamer);
+    if (hallOfFamers.length > 0) {
+        hallOfFamers.forEach(fighter => {
+            panel.hallOfFameList.innerHTML += `<div class="bg-gray-900 p-1 rounded truncate text-amber-400 flex justify-between items-center">${HALL_OF_FAME_SYMBOL} ${fighter.name} <button data-appid="${fighter.appId}" class="reactivate-btn bg-green-700 hover:bg-green-600 px-2 py-0.5 rounded text-white text-xs">Reactivate</button></div>`;
+        });
+    } else {
+        panel.hallOfFameList.innerHTML = `<p class="text-center text-gray-500 text-xs">The Hall of Fame awaits its first inductee.</p>`;
     }
 
+    const allGenres = new Set(state.universeFighters.flatMap(f => f.genres || []));
+    const tappedGenres = new Set(Object.keys(state.roster.local));
+    allGenres.forEach(genre => {
+        if (!genre) return;
+        const list = tappedGenres.has(genre) ? panel.tappedGenresList : panel.untappedGenresList;
+        const formattedGenre = genre.charAt(0).toUpperCase() + genre.slice(1);
+        list.innerHTML += `<button class="bg-gray-900 hover:bg-gray-700 p-1 rounded w-full text-left genre-expand-btn" data-genre="${genre}">${formattedGenre}</button>`;
+    });
+    if (panel.untappedGenresList.innerHTML === '') panel.untappedGenresList.innerHTML = `<p class="text-xs text-gray-500 text-center">No untapped genres.</p>`;
+    if (panel.tappedGenresList.innerHTML === '') panel.tappedGenresList.innerHTML = `<p class="text-xs text-gray-500 text-center">No existing titles to expand.</p>`;
 
-    // 5. Calculate & Display Potential Matchups
+    // --- NEW LOGIC FOR POTENTIAL FIGHTS ---
+    
+    // 1. Calculate all potential matchups and title fights
     const allPotentialMatchups = [];
+    const allPotentialTitles = [];
     for (let i = 0; i < activeFighters.length; i++) {
         for (let j = i + 1; j < activeFighters.length; j++) {
             const f1 = activeFighters[i];
             const f2 = activeFighters[j];
             const score1 = applyBonuses(calculateRawScore(f1), f1);
             const score2 = applyBonuses(calculateRawScore(f2), f2);
-            allPotentialMatchups.push({ f1, f2, scoreDiff: Math.abs(score1 - score2) });
+            const scoreDiff = Math.abs(score1 - score2);
+            allPotentialMatchups.push({ f1, f2, scoreDiff });
+
+            const titles = getAvailableTitleFights(f1, f2);
+            if (titles.length > 0) {
+                titles.forEach(title => {
+                    allPotentialTitles.push({ f1, f2, scoreDiff, title });
+                });
+            }
+        }
+    }
+
+    // 2. Populate Close Matchups (unchanged)
+    allPotentialMatchups.sort((a, b) => a.scoreDiff - b.scoreDiff);
+    potentialMatchupsList.innerHTML = '';
+    allPotentialMatchups.slice(0, 10).forEach(match => {
+        potentialMatchupsList.innerHTML += `<div class="bg-gray-900 p-1 rounded text-xs flex justify-between items-center"><span>${match.f1.name} vs ${match.f2.name}</span><button class="load-match-btn bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded" data-f1-id="${match.f1.appId}" data-f2-id="${match.f2.appId}" data-titles="[]">Load</button></div>`;
+    });
+    if (potentialMatchupsList.innerHTML === '') potentialMatchupsList.innerHTML = `<p class="text-center text-gray-500 text-xs">No close matchups found.</p>`;
+
+    // 3. Find the single best matchup for each title
+    const bestMatchForTitle = new Map();
+    allPotentialTitles.forEach(match => {
+        const titleKey = match.title.key;
+        if (!bestMatchForTitle.has(titleKey) || match.scoreDiff < bestMatchForTitle.get(titleKey).scoreDiff) {
+            bestMatchForTitle.set(titleKey, match);
+        }
+    });
+
+    // 4. Build the final display list according to the new priority
+    const displayList = [];
+    const addedMatches = new Set();
+    const titleOrder = ['undisputed', 'interGenre', 'heavyweight', 'cruiserweight', 'featherweight', ...Object.keys(state.roster.local).sort()];
+    
+    // Add the "best" matches first
+    titleOrder.forEach(titleKey => {
+        if (bestMatchForTitle.has(titleKey)) {
+            const bestMatch = bestMatchForTitle.get(titleKey);
+            const matchId = `${[bestMatch.f1.appId, bestMatch.f2.appId].sort().join('-')}-${bestMatch.title.key}`;
+            if (!addedMatches.has(matchId)) {
+                displayList.push(bestMatch);
+                addedMatches.add(matchId);
+            }
+        }
+    });
+
+    // 5. Fill remaining slots with other good title fights
+    if (displayList.length < 10) {
+        const titlePriority = { undisputed: 0, interGenre: 1, heavyweight: 1, cruiserweight: 1, featherweight: 1 };
+        allPotentialTitles.sort((a, b) => {
+            const priorityA = titlePriority[a.title.key] ?? 2;
+            const priorityB = titlePriority[b.title.key] ?? 2;
+            if (priorityA !== priorityB) return priorityA - priorityB;
+            return a.scoreDiff - b.scoreDiff;
+        });
+
+        for (const match of allPotentialTitles) {
+            if (displayList.length >= 10) break;
+            const matchId = `${[match.f1.appId, match.f2.appId].sort().join('-')}-${match.title.key}`;
+            if (!addedMatches.has(matchId)) {
+                displayList.push(match);
+                addedMatches.add(matchId);
+            }
         }
     }
     
-    allPotentialMatchups.sort((a, b) => a.scoreDiff - b.scoreDiff);
-    allPotentialMatchups.slice(0, 10).forEach(match => {
-        potentialMatchupsList.innerHTML += `
-            <div class="bg-gray-900 p-1 rounded text-xs flex justify-between items-center">
-                <span>${match.f1.name} vs ${match.f2.name}</span>
-                <button class="load-match-btn bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded" data-f1-id="${match.f1.appId}" data-f2-id="${match.f2.appId}" data-titles="[]">Load</button>
-            </div>`;
-    });
-
-     if (potentialMatchupsList.innerHTML === '') {
-        potentialMatchupsList.innerHTML = `<p class="text-center text-gray-500 text-xs">No close matchups found.</p>`;
-    }
-    
-    // 6. Calculate and Display Potential Title Fights
-    const allPotentialTitles = [];
-    activeFighters.forEach(f1 => {
-        activeFighters.forEach(f2 => {
-            if (f1.appId === f2.appId) return;
-            const titles = getAvailableTitleFights(f1, f2);
-            if (titles.length > 0) {
-                 allPotentialTitles.push({f1, f2, titles});
-            }
-        });
-    });
-
-    // Simple sort for now, can be improved
-    allPotentialTitles.slice(0, 10).forEach(match => {
-        const titleInfo = match.titles[0]; // Just show the first available title for simplicity
-        potentialTitlesList.innerHTML += `
-            <div class="bg-gray-900 p-1 rounded text-xs flex justify-between items-center">
-                <span class="truncate pr-2" title="${match.f1.name} vs ${match.f2.name} for ${titleInfo.name}">${titleInfo.name}</span>
-                <button class="load-match-btn bg-amber-600 hover:bg-amber-700 text-white px-2 py-0.5 rounded" data-f1-id="${match.f1.appId}" data-f2-id="${match.f2.appId}" data-titles='${JSON.stringify(match.titles)}'>Load</button>
-            </div>
-        `;
+    // 6. Render the final list
+    potentialTitlesList.innerHTML = '';
+    displayList.slice(0, 10).forEach(match => {
+        potentialTitlesList.innerHTML += `<div class="bg-gray-900 p-1 rounded text-xs flex justify-between items-center"><span class="truncate pr-2" title="${match.f1.name} vs ${match.f2.name} for ${match.title.name}">${match.title.name}</span><button class="load-match-btn bg-amber-600 hover:bg-amber-700 text-white px-2 py-0.5 rounded" data-f1-id="${match.f1.appId}" data-f2-id="${match.f2.appId}" data-titles='${JSON.stringify([match.title])}'>Load</button></div>`;
     });
 
     if (potentialTitlesList.innerHTML === '') {
         potentialTitlesList.innerHTML = `<p class="text-center text-gray-500 text-xs">No title fights available.</p>`;
     }
-
-
-    // 7. Untapped and Tapped Genres
-    const allGenres = new Set(state.universeFighters.flatMap(f => f.genres || []));
-    const tappedGenres = new Set(Object.keys(state.roster.local));
-    
-    allGenres.forEach(genre => {
-        if (!genre) return;
-        const list = tappedGenres.has(genre) ? tappedGenresList : untappedGenresList;
-        const formattedGenre = genre.charAt(0).toUpperCase() + genre.slice(1);
-        list.innerHTML += `
-            <button class="bg-gray-900 hover:bg-gray-700 p-1 rounded w-full text-left genre-expand-btn" data-genre="${genre}">
-                ${formattedGenre}
-            </button>`;
-    });
-
-    if (untappedGenresList.innerHTML === '') untappedGenresList.innerHTML = `<p class="text-xs text-gray-500 text-center">No untapped genres.</p>`;
-    if (tappedGenresList.innerHTML === '') tappedGenresList.innerHTML = `<p class="text-xs text-gray-500 text-center">No existing titles to expand.</p>`;
 }
-
 
 export function masterReset() {
     showConfirmationModal("Reset Universe?", "This will delete all fighters, champions, and history. This action cannot be undone.")
@@ -664,63 +731,108 @@ export function swapCards() {
 }
 
 function getAvailableTitleFights(fighter1, fighter2) {
-    if (!fighter1 || !fighter2 || !fighter1.appId || !fighter2.appId) return [];
+    // This logic is ported from the original single-file version for correctness.
+    if (!fighter1 || !fighter1.name || !fighter2 || !fighter2.name || fighter1.isRetired || fighter2.isRetired) return [];
 
-    const available = [];
     const status1 = getChampionStatus(fighter1.name);
     const status2 = getChampionStatus(fighter2.name);
-    const weightClass1 = getWeightClass(calculateRawScore(fighter1));
-    const weightClass2 = getWeightClass(calculateRawScore(fighter2));
+    const rawScore1 = calculateRawScore(fighter1);
+    const rawScore2 = calculateRawScore(fighter2);
+    const weightClass1 = getWeightClass(rawScore1);
+    const weightClass2 = getWeightClass(rawScore2);
+    const fighter1Genres = fighter1.genres || [];
+    const fighter2Genres = fighter2.genres || [];
 
-    const isSameWeightClass = weightClass1 === weightClass2 && weightClass1 !== 'Unranked';
+    const available = [];
+    const majorChampKeys = ['featherweight', 'cruiserweight', 'heavyweight', 'interGenre'];
+    const f1IsMajorChamp = majorChampKeys.includes(status1.status);
+    const f2IsMajorChamp = majorChampKeys.includes(status2.status);
+    const f1IsLocalChamp = status1.status === 'local';
+    const f2IsLocalChamp = status2.status === 'local';
 
-    // Rule 1: Challenge for current champion's title
-    const checkChallenge = (challengerStatus, championStatus, f1, f2) => {
-        if (championStatus.status === 'undisputed' && challengerStatus.status !== 'contender' && challengerStatus.status !== 'local') {
-             available.push({ key: 'undisputed', name: 'Undisputed Title', symbol: state.roster.major.undisputed.symbol });
-        } else if (['heavyweight', 'cruiserweight', 'featherweight', 'interGenre'].includes(championStatus.status)) {
-            if(challengerStatus.status !== 'contender') {
-                 available.push({ key: championStatus.status, name: `${championStatus.status.charAt(0).toUpperCase() + championStatus.status.slice(1)} Title`, symbol: state.roster.major[championStatus.status].symbol });
-            }
-        } else if (championStatus.status === 'local') {
-            const commonGenres = (f1.genres || []).filter(g => (f2.genres || []).includes(g));
-            if (commonGenres.includes(championStatus.key)) {
-                available.push({ key: championStatus.key, name: `${championStatus.key.charAt(0).toUpperCase() + championStatus.key.slice(1)} Title`, symbol: state.roster.local[championStatus.key].symbol });
+    // Helper to format the return object for consistency in the new modular structure.
+    const formatTitle = (key, name, symbol) => ({ key, name, symbol });
+
+    // 1. Undisputed Title Unification/Defense - This now correctly returns immediately.
+    if (state.roster.major.undisputed.name === 'Vacant') {
+        if (f1IsMajorChamp && f2IsMajorChamp && status1.status !== status2.status) {
+            const symbol = state.roster.major.undisputed.symbol;
+            return [formatTitle('undisputed', `💎 For the UNDISPUTED Title! 💎`, symbol)];
+        }
+    } else {
+        const symbol = state.roster.major.undisputed.symbol;
+        if (status1.status === 'undisputed' && f2IsMajorChamp) {
+            return [formatTitle('undisputed', `💎 Defend the UNDISPUTED Title! 💎`, symbol)];
+        }
+        if (status2.status === 'undisputed' && f1IsMajorChamp) {
+            return [formatTitle('undisputed', `💎 Challenge for the UNDISPUTED Title! 💎`, symbol)];
+        }
+    }
+
+    // 2. Inter-Genre Title
+    if (state.roster.major.interGenre.name === 'Vacant') {
+        if (f1IsLocalChamp && f2IsLocalChamp) {
+            const symbol = state.roster.major.interGenre.symbol;
+            available.push(formatTitle('interGenre', `⭐ For the vacant Inter-Genre Championship ⭐`, symbol));
+        }
+    } else {
+        const symbol = state.roster.major.interGenre.symbol;
+        if (status1.status === 'interGenre' && f2IsLocalChamp) {
+            available.push(formatTitle('interGenre', `⭐ Defend Inter-Genre Title ⭐`, symbol));
+        }
+        if (status2.status === 'interGenre' && f1IsLocalChamp) {
+            available.push(formatTitle('interGenre', `⭐ Challenge for Inter-Genre Title ⭐`, symbol));
+        }
+    }
+
+    // 3. Weight Class Titles
+    if (weightClass1 === weightClass2 && weightClass1 !== 'Unranked') {
+        const wcKey = weightClass1.toLowerCase();
+        if (state.roster.major[wcKey]) {
+            const champName = state.roster.major[wcKey].name;
+            const symbol = state.roster.major[wcKey].symbol;
+            const titleText = `${symbol} ${weightClass1} Championship ${symbol}`;
+
+            if (champName === 'Vacant' && f1IsLocalChamp && f2IsLocalChamp) {
+                 available.push(formatTitle(wcKey, `For the vacant ${titleText}`, symbol));
+            } else if (champName === fighter1.name && f2IsLocalChamp) {
+                available.push(formatTitle(wcKey, `Defend ${titleText}`, symbol));
+            } else if (champName === fighter2.name && f1IsLocalChamp) {
+                available.push(formatTitle(wcKey, `Challenge for ${titleText}`, symbol));
             }
         }
-    };
-    
-    if (status2.status !== 'contender') checkChallenge(status1, status2, fighter1, fighter2);
-    if (status1.status !== 'contender') checkChallenge(status2, status1, fighter2, fighter1);
+    }
 
-    // Rule 2: Fight for vacant titles
+    // 4. Local Titles
     if (status1.status === 'contender' && status2.status === 'contender') {
-        const commonGenres = (fighter1.genres || []).filter(g => (fighter2.genres || []).includes(g));
-        commonGenres.forEach(genre => {
-            if (state.roster.local[genre] && state.roster.local[genre].name === 'Vacant') {
-                available.push({ key: genre, name: `Vacant ${genre.charAt(0).toUpperCase() + genre.slice(1)} Title`, symbol: state.roster.local[genre].symbol });
-            }
-        });
+        Object.keys(state.roster.local)
+            .filter(key => state.roster.local[key].name === 'Vacant')
+            .forEach(key => {
+                if (fighter1Genres.includes(key) && fighter2Genres.includes(key)) {
+                    const symbol = state.roster.local[key].symbol;
+                    const text = `${symbol} ${key.charAt(0).toUpperCase() + key.slice(1)} Championship ${symbol}`;
+                    available.push(formatTitle(key, text, symbol));
+                }
+            });
     }
-
-    const bothAreLocalChamps = status1.status === 'local' && status2.status === 'local';
-    if (bothAreLocalChamps) {
-        if (state.roster.major.interGenre.name === 'Vacant') {
-            available.push({ key: 'interGenre', name: 'Vacant Inter-Genre Title', symbol: state.roster.major.interGenre.symbol });
+    if (status1.status === 'local' && status2.status === 'contender') {
+        const titleGenre = status1.key;
+        if (fighter2Genres.includes(titleGenre)) {
+            const localInfo = state.roster.local[titleGenre];
+            const text = `Defend ${localInfo.symbol} ${titleGenre.charAt(0).toUpperCase() + titleGenre.slice(1)} Championship ${localInfo.symbol}`;
+            available.push(formatTitle(titleGenre, text, localInfo.symbol));
         }
-        if (isSameWeightClass && state.roster.major[weightClass1.toLowerCase()] && state.roster.major[weightClass1.toLowerCase()].name === 'Vacant') {
-             available.push({ key: weightClass1.toLowerCase(), name: `Vacant ${weightClass1} Title`, symbol: state.roster.major[weightClass1.toLowerCase()].symbol });
+    }
+    if (status2.status === 'local' && status1.status === 'contender') {
+        const titleGenre = status2.key;
+        if (fighter1Genres.includes(titleGenre)) {
+            const localInfo = state.roster.local[titleGenre];
+            const text = `Challenge for ${localInfo.symbol} ${titleGenre.charAt(0).toUpperCase() + titleGenre.slice(1)} Championship ${localInfo.symbol}`;
+            available.push(formatTitle(titleGenre, text, localInfo.symbol));
         }
     }
 
-    const isMajorChamp1 = ['heavyweight', 'cruiserweight', 'featherweight', 'interGenre'].includes(status1.status);
-    const isMajorChamp2 = ['heavyweight', 'cruiserweight', 'featherweight', 'interGenre'].includes(status2.status);
-    if (isMajorChamp1 && isMajorChamp2 && status1.status !== status2.status) {
-         if (state.roster.major.undisputed.name === 'Vacant') {
-             available.push({ key: 'undisputed', name: 'Vacant Undisputed Title', symbol: state.roster.major.undisputed.symbol });
-         }
-    }
-
+    // Remove duplicates that might arise from different logic paths
     const uniqueKeys = new Set();
     return available.filter(el => {
         const isDuplicate = uniqueKeys.has(el.key);
@@ -740,8 +852,8 @@ export function openTitleSelectionModal(specificTitles = null) {
         availableTitles.forEach(titleInfo => {
             container.innerHTML += `
                 <label class="flex items-center space-x-3 p-2 bg-gray-700 rounded-lg hover:bg-gray-600 cursor-pointer">
-                    <input type="radio" name="title-option" value="${titleInfo.key || titleInfo.value}" class="form-radio h-5 w-5 text-amber-500 bg-gray-900 border-gray-600 focus:ring-amber-400">
-                    <span class="font-semibold">${titleInfo.symbol} ${titleInfo.name || titleInfo.text}</span>
+                    <input type="radio" name="title-option" value="${titleInfo.key}" class="form-radio h-5 w-5 text-amber-500 bg-gray-900 border-gray-600 focus:ring-amber-400">
+                    <span class="font-semibold">${titleInfo.symbol} ${titleInfo.name}</span>
                 </label>`;
         });
         container.innerHTML += `
@@ -754,11 +866,6 @@ export function openTitleSelectionModal(specificTitles = null) {
     }
     
     dom.titleSelectModal.modal.classList.remove('hidden');
-}
-
-export function setSelectedTitle(title) {
-    state.selectedTitleForFight = title;
-    updateTitleMatchAnnouncement();
 }
 
 export function applyRosterChanges() {

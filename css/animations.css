@@ -107,7 +107,7 @@
 }
 @keyframes animate-title-to-winner-right {
     0% { opacity: 1; transform: translate(-50%, 0) scale(1.2); }
-    100% { opacity: 0; transform: translate(25%, -250%) scale(0.8); }
+    100% { opacity: 0; transform: translate(125%, -250%) scale(0.8); }
 }
 .animate-title-to-winner-right {
      animation: animate-title-to-winner-right 1.5s ease-in-out forwards;

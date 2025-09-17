@@ -1,4 +1,4 @@
-import { showToast, populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, displayFighterInfoModal, retireFighter, openGenreExpansionModal, openTop100Selection, populateAndShowEditModal, clearForNextRound, loadCardFromData, clearCard, clearBothCards } from './ui.js';
+import { showToast, populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, displayFighterInfoModal, retireFighter, openGenreExpansionModal, openTop100Selection, populateAndShowEditModal, clearForNextRound, loadCardFromData, clearCard, clearBothCards, updateTitleMatchAnnouncement } from './ui.js';
 import { fetchSteamData, updateScoresOnly, fetchAndAddSingleFighter, populateUniverseFromSteamIds } from './api.js';
 import { startFight } from './fight.js';
 import { downloadJSON, triggerFileUpload } from './utils.js';
@@ -52,6 +52,17 @@ export function initializeApp() {
 }
 
 // --- STATE FUNCTIONS ---
+
+/**
+ * Sets the selected title for an upcoming fight and updates the UI.
+ * @param {string} title - The key of the title to be contested (e.g., 'heavyweight', 'undisputed', or 'none').
+ */
+export function setSelectedTitle(title) {
+    state.selectedTitleForFight = title;
+    updateTitleMatchAnnouncement();
+}
+
+
 export function createNewFighter() {
     return {
         name: '', devHouse: '', publisher: '',
@@ -246,7 +257,9 @@ export function attachEventListeners() {
     
     dom.titleSelectModal.confirmBtn.addEventListener('click', () => { 
         const selectedOption = document.querySelector('input[name="title-option"]:checked'); 
-        if (selectedOption) import('./ui.js').then(ui => ui.setSelectedTitle(selectedOption.value));
+        if (selectedOption) {
+            setSelectedTitle(selectedOption.value);
+        }
         updateScoresAndDisplay(); 
         dom.titleSelectModal.modal.classList.add('hidden'); 
     });
@@ -458,7 +471,7 @@ export function attachEventListeners() {
             const currentTitle = infoSpan.title;
             const currentText = infoSpan.textContent;
             infoSpan.title = currentText;
-            infoSpan.textContent = currentTitle;
+            infoSpan.textContent = currentText;
         } else if (event.target.closest('.universe-fighter-entry')) {
             const fighterEntry = event.target.closest('.universe-fighter-entry');
             if (event.target.closest('button')) return; // Ignore clicks on buttons inside the entry
