@@ -159,7 +159,9 @@ async function runTickerIntro(maxRounds, f1, f2) {
         const recordSpeech = `${tko} wins by TKO, ${ko} knockouts, and ${losses} losses`;
         const recordText = `${tko}-${ko}-${losses}`;
         const segments = [];
-        const majorChampInfo = getMajorChampionInfo(name);
+        
+        const isUnification = state.selectedTitleForFight === 'undisputed';
+        const majorChampInfo = getMajorChampionInfo(name, !isUnification); // Pass isDefense flag
         const localChampInfo = getLocalChampionInfo(name);
         
         let scoreText = rawScore.toFixed(2) !== finalScore.toFixed(2) ? `weighing in at ${rawScore.toFixed(2)} score and weighted ${finalScore.toFixed(2)}` : `weighing in at ${rawScore.toFixed(2)} score.`;
@@ -211,17 +213,22 @@ async function runTickerIntro(maxRounds, f1, f2) {
         }
         
         if (majorChampInfo) {
-            champTypeForSound = majorChampInfo.type;
-            const prefix = hasAnyTitle ? 'And the' : 'The';
-            const speech = `${prefix} ${majorChampInfo.speech}`;
-            segments.push({text: `<span class="title-fanfare">${speech}</span>`, speech: speech, isEntranceTrigger: !hasAnyTitle, champType: majorChampInfo.type, isFlashing: true });
-            hasAnyTitle = true;
+            // Don't announce the title if they are defending it (it's already been announced)
+            if (state.selectedTitleForFight !== majorChampInfo.type || isUnification) {
+                champTypeForSound = majorChampInfo.type;
+                const prefix = hasAnyTitle ? 'And the' : 'The';
+                const speech = `${prefix} ${majorChampInfo.speech}`;
+                segments.push({text: `<span class="title-fanfare">${speech}</span>`, speech: speech, isEntranceTrigger: !hasAnyTitle, champType: majorChampInfo.type, isFlashing: true });
+                hasAnyTitle = true;
+            }
         } else if (localChampInfo) {
-            champTypeForSound = 'local';
-            const prefix = hasAnyTitle ? 'And the' : 'The';
-            const announcement = `${prefix} ${localChampInfo.key.charAt(0).toUpperCase() + localChampInfo.key.slice(1)} Champion!`;
-            segments.push({text: `<span class="title-fanfare">${announcement}</span>`, speech: announcement, isEntranceTrigger: !hasAnyTitle, champType: 'local', isFlashing: true});
-            hasAnyTitle = true;
+             if (state.selectedTitleForFight !== localChampInfo.key) {
+                champTypeForSound = 'local';
+                const prefix = hasAnyTitle ? 'And the' : 'The';
+                const announcement = `${prefix} ${localChampInfo.key.charAt(0).toUpperCase() + localChampInfo.key.slice(1)} Champion!`;
+                segments.push({text: `<span class="title-fanfare">${announcement}</span>`, speech: announcement, isEntranceTrigger: !hasAnyTitle, champType: 'local', isFlashing: true});
+                hasAnyTitle = true;
+             }
         }
 
         segments[0].isEntranceTrigger = !hasAnyTitle;
@@ -273,8 +280,8 @@ export async function startFight() {
             </tbody>
         </table>`;
 
-    dom.fightModal.fighter1.svg.classList.remove('knocked-down');
-    dom.fightModal.fighter2.svg.classList.remove('knocked-down');
+    dom.fightModal.fighter1.svg.classList.remove('knocked-down-left');
+    dom.fightModal.fighter2.svg.classList.remove('knocked-down-right');
     
     let health1 = 100, health2 = 100;
     let stamina1 = 100, stamina2 = 100;
@@ -314,6 +321,7 @@ export async function startFight() {
     async function handleKnockdown(fighterId) {
         const isFighter1 = fighterId === 1;
         const downedFighterSvg = isFighter1 ? dom.fightModal.fighter1.svg : dom.fightModal.fighter2.svg;
+        const knockdownClass = isFighter1 ? 'knocked-down-left' : 'knocked-down-right';
         const standingFighterSvg = isFighter1 ? dom.fightModal.fighter2.svg : dom.fightModal.fighter1.svg;
         const standingFighterStamina = isFighter1 ? stamina2 : stamina1;
         
@@ -322,7 +330,7 @@ export async function startFight() {
         playSound('crowd_roar', { intensity: 1.0 });
 
         const fighterName = isFighter1 ? state.fighter1.name || "Fighter 1" : state.fighter2.name || "Fighter 2";
-        downedFighterSvg.classList.add('knocked-down');
+        downedFighterSvg.classList.add(knockdownClass);
         logFightMessage(`<p class="text-red-500 font-bold">${fighterName} is DOWN!</p>`);
         
         for (let count = 1; count <= 10; count++) {
@@ -343,7 +351,7 @@ export async function startFight() {
                 else health2 = Math.max(health2, recoveredHealth);
                
                 logFightMessage(`<p class="text-green-400 font-bold">${fighterName} beats the count and recovers to ${recoveredHealth.toFixed(1)} health!</p>`);
-                downedFighterSvg.classList.remove('knocked-down');
+                downedFighterSvg.classList.remove(knockdownClass);
                 dom.fightModal.referee.classList.remove('ref-counting', 'ref-visible');
                 await delay(dom.fightModal.disableDelayCheckbox.checked ? 500 : 5000);
                 
@@ -378,6 +386,16 @@ export async function startFight() {
     
     dom.fightModal.referee.classList.add('ref-visible', 'ref-start-fight');
     dom.fightModal.roundCounter.textContent = "FIGHT!";
+    
+    if (state.selectedTitleForFight !== 'none' && !dom.fightModal.disableDelayCheckbox.checked) {
+        await delay(7000);
+    }
+
+    if (state.fightCancellationToken.cancelled) {
+        dom.fightModal.modal.classList.add('hidden');
+        return;
+    }
+    
     await playBellSequence(2);
     dom.fightModal.referee.classList.remove('ref-start-fight');
     refIcon.style.display = 'none';

@@ -50,13 +50,22 @@
 }
 .boxer-idle .celebrate-arm { animation: raise-arm-celebration 1s ease-in-out; }
 
-@keyframes knocked-down-anim {
+@keyframes knocked-down-anim-left {
+    to { transform: rotate(-90deg) translateY(30px); opacity: 0.8; }
+}
+.knocked-down-left { 
+    transform-origin: 50% 85%; /* Rotate from the feet */
+    animation: knocked-down-anim-left 0.5s ease-out forwards; 
+}
+
+@keyframes knocked-down-anim-right {
     to { transform: rotate(90deg) translateY(30px); opacity: 0.8; }
 }
-.knocked-down { 
+.knocked-down-right { 
     transform-origin: 50% 85%; /* Rotate from the feet */
-    animation: knocked-down-anim 0.5s ease-out forwards; 
+    animation: knocked-down-anim-right 0.5s ease-out forwards; 
 }
+
 
 /* --- Ticker Animations --- */
 .scrolling {
@@ -126,3 +135,4 @@
     50% { transform: translateY(-5px); }
 }
 .ref-counting #ref-arm-left { animation: ref-counting 1s infinite ease-in-out; transform-origin: top left; }
+
