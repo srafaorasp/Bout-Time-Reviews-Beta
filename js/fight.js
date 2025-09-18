@@ -1,7 +1,7 @@
 import { state, dom, punchTypes } from './state.js';
 import { displayFightWinner, logFightMessage, updateFightUI, displayInitialFighterTitles, animateTitleBout, updateHitBonusDisplay, getMajorChampionInfo, getLocalChampionInfo, hasAchievedGrandSlam } from './ui.js';
 import { playBellSequence, playSound, speak } from './sound.js';
-import { delay } from './utils.js';
+import { delay, calculateRawScore } from './utils.js';
 
 // --- CORE CALCULATION LOGIC ---
 
@@ -19,41 +19,20 @@ export function getChampionshipBonus(fighterObject) {
     const name = fighterObject.name;
     if (name === 'Vacant' || (fighterObject.isRetired && !fighterObject.isHallOfFamer)) return 0;
 
+    if (name === state.roster.interUniverseChampion.name) potentialBonuses.push(0.04);
     if (name === state.roster.major.undisputed.name) potentialBonuses.push(0.03);
     if (['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].some(key => state.roster.major[key].name === name)) potentialBonuses.push(0.02);
     if (Object.keys(state.roster.local).some(key => state.roster.local[key].name === name)) potentialBonuses.push(0.01);
     
     const pastTitles = fighterObject.record.pastTitles || {};
+    if (Object.keys(pastTitles).some(key => key.startsWith('Inter-Universe Champion'))) {
+        potentialBonuses.push(0.03);
+    }
     if (pastTitles.undisputed) potentialBonuses.push(0.02);
     if (Object.keys(pastTitles).some(title => ['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].includes(title))) {
         potentialBonuses.push(0.01);
     }
     return Math.max(...potentialBonuses);
-}
-
-export function calculateRawScore(fighterObject) {
-    if (!fighterObject) return 0;
-    const metacriticInput = fighterObject.scores.metacritic;
-    const metacriticScore = (metacriticInput !== '404' && metacriticInput) ? parseFloat(metacriticInput) / 10.0 : 0;
-    let totalScore = 0, weightCount = 0;
-
-    if (fighterObject.steamData) {
-        const steamReviewData = fighterObject.steamData;
-        const communityScore = (steamReviewData.total_reviews > 0) ? (steamReviewData.total_positive / steamReviewData.total_reviews) * 10 : 0;
-        
-        if (communityScore > 0) {
-            totalScore += communityScore * 0.70;
-            weightCount += 0.70;
-        }
-        if (metacriticScore > 0) {
-            totalScore += metacriticScore * 0.30;
-            weightCount += 0.30;
-        }
-    } else if (metacriticScore > 0) { // Fallback if no steam data
-        totalScore = metacriticScore;
-        weightCount = 1;
-    }
-    return weightCount > 0 ? totalScore / weightCount : 0;
 }
 
 export function applyBonuses(rawScore, fighterObject) {
@@ -99,6 +78,7 @@ function buildBoutAnnouncement(maxRounds) {
         const titleKey = state.selectedTitleForFight;
         if (state.roster.local[titleKey]) titleName = `the ${titleKey} championship!`; 
         else if (state.roster.major[titleKey]) titleName = `the world ${titleKey.replace('interGenre','inter-genre')} championship!`; 
+        else if (titleKey === 'interUniverse') titleName = 'the Inter-Universe Championship!';
         introText += ` and is for <span class="title-fanfare">${titleName}</span>`; 
     } 
     return [{text: introText, speech: introText, isEntranceTrigger: false}]; 
@@ -264,7 +244,7 @@ export async function startFight() {
     refIcon.style.display = 'none'; 
     
     if (state.selectedTitleForFight !== 'none') {
-        const titleObject = state.roster.major[state.selectedTitleForFight] || state.roster.local[state.selectedTitleForFight];
+        const titleObject = state.roster.major[state.selectedTitleForFight] || state.roster.local[state.selectedTitleForFight] || (state.selectedTitleForFight === 'interUniverse' && state.roster.interUniverseChampion);
         if (titleObject && titleObject.symbol) {
             refIcon.textContent = titleObject.symbol;
             refIcon.style.display = 'block';
@@ -295,7 +275,7 @@ export async function startFight() {
     displayInitialFighterTitles();
     dom.fightModal.fighter1.svg.classList.add('boxer-offscreen-left'); dom.fightModal.fighter2.svg.classList.add('boxer-offscreen-right');
     dom.fightModal.fighter1.svg.style.visibility = 'visible'; dom.fightModal.fighter2.svg.style.visibility = 'visible';
-    let maxRounds = (dom.center.lowCardCheckbox.checked || state.selectedTitleForFight === 'none') ? 6 : (state.selectedTitleForFight === 'undisputed' ? 12 : (state.roster.major[state.selectedTitleForFight] ? 10 : 8));
+    let maxRounds = (dom.center.lowCardCheckbox.checked || state.selectedTitleForFight === 'none') ? 6 : (state.selectedTitleForFight === 'interUniverse' ? 15 : (state.selectedTitleForFight === 'undisputed' ? 12 : (state.roster.major[state.selectedTitleForFight] ? 10 : 8)));
     
     const rawScore1 = calculateRawScore(state.fighter1), rawScore2 = calculateRawScore(state.fighter2); 
     let finalRound = 0, fightWinnerName = null, winType = null;
@@ -565,6 +545,4 @@ export async function startFight() {
       await displayFightWinner(fightWinnerName, winType, finalRound);
     }
 }
-
-
 

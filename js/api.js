@@ -1,6 +1,6 @@
 import { state, dom, createNewFighter, updateTimestamp, addFighterToUniverse, updateFighterInUniverse } from './state.js';
-import { updateUIAfterFetch, updateScoresAndDisplay, showToast, showOriginLockoutModal, populateUniverseSelectors } from './ui.js';
-import { delay } from './utils.js';
+import { updateUIAfterFetch, updateScoresAndDisplay, populateUniverseSelectors } from './ui.js';
+import { delay, showToast } from './utils.js';
 
 const initialProxies = [
     'https://cors.eu.org/',
@@ -205,25 +205,17 @@ export async function fetchAndAddSingleFighter(appId) {
 export async function populateUniverseFromSteamIds(ids) {
     const btn = dom.universeSetupModal.startBtn;
     const errorEl = dom.universeSetupModal.error;
-    const lockedOrigins = new Set();
     let currentIdIndex = 0;
     let universeCount = 0;
 
     btn.disabled = true;
     btn.textContent = 'Populating...';
 
-    // Prefill locked origins from existing universe
-    state.universeFighters.forEach(f => {
-        if (f.devHouse) lockedOrigins.add(f.devHouse);
-        if (f.publisher) lockedOrigins.add(f.publisher);
-    });
-
     while (currentIdIndex < ids.length) {
         const appId = ids[currentIdIndex];
         errorEl.textContent = `Processing fighter ${currentIdIndex + 1} of ${ids.length}...`;
         currentIdIndex++;
         
-        // Skip if already in universe
         if (state.universeFighters.some(f => f.appId === appId)) {
             continue;
         }
@@ -251,35 +243,6 @@ export async function populateUniverseFromSteamIds(ids) {
                 newFighter.scores.metacritic = '404';
             }
             updateTimestamp(newFighter);
-
-            const dev = newFighter.devHouse;
-            const pub = newFighter.publisher;
-            let conflict = false;
-            let conflictingOrigin = '';
-
-            if (dev && lockedOrigins.has(dev)) {
-                conflict = true;
-                conflictingOrigin = dev;
-            } else if (pub && pub !== dev && lockedOrigins.has(pub)) {
-                conflict = true;
-                conflictingOrigin = pub;
-            }
-
-            if (conflict) {
-                const existingFighter = state.universeFighters.find(f => f.devHouse === conflictingOrigin || f.publisher === conflictingOrigin);
-                const existingFighterName = existingFighter ? existingFighter.name : 'a previous fighter';
-                
-                const decision = await showOriginLockoutModal(newFighter.name, existingFighterName, conflictingOrigin);
-
-                if (decision === 'skip') {
-                    errorEl.textContent = `Skipping ${newFighter.name}...`;
-                    await delay(1500);
-                    continue; 
-                }
-            }
-            
-            if (dev) lockedOrigins.add(dev);
-            if (pub) lockedOrigins.add(pub);
             
             addFighterToUniverse(newFighter);
             universeCount++;

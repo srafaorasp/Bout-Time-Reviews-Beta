@@ -30,7 +30,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeApp();
     attachEventListeners();
 
-    // 3. Initialize audio context on the first user interaction to comply with browser policies.
+    // 3. Dynamically and safely try to load and initialize dev tools.
+    try {
+        // We use a dynamic import() which will not crash the app if the file doesn't exist.
+        const devModule = await import('./dev.js');
+        if (devModule && devModule.isDevMode) {
+            devModule.initializeDevTools();
+        }
+    } catch (error) {
+        // This will catch the error if dev.js is not found or fails to load.
+        // We can log it for information, but it won't crash the app.
+        console.log("Dev mode file not found or failed to load. Running in production mode.");
+    }
+
+    // 4. Initialize audio context on the first user interaction to comply with browser policies.
     const initAudioOnce = () => {
         initAudio();
         // Remove the listeners after the first interaction.

@@ -43,10 +43,61 @@ export function triggerFileUpload(callback, extension) {
                 callback(data);
             } catch (err) {
                 console.error(`Error parsing imported ${extension} file:`, err);
-                import('./ui.js').then(ui => ui.showToast(`Error: Could not read the file. Please check format.`, 5000));
+                showToast(`Error: Could not read the file. Please check format.`, 5000);
             }
         };
         reader.readAsText(file);
     };
     input.click();
 }
+
+/**
+ * Displays a short-lived notification message on the screen.
+ * @param {string} message - The message to display.
+ * @param {number} [duration=5000] - How long to display the message in milliseconds.
+ */
+export function showToast(message, duration = 5000) {
+    const toastContainer = document.getElementById('toast-notification');
+    const toastMessage = document.getElementById('toast-message');
+    if (!toastContainer || !toastMessage) return;
+
+    toastMessage.textContent = message;
+    toastContainer.classList.remove('hidden');
+    toastContainer.classList.add('opacity-100');
+    
+    setTimeout(() => {
+        toastContainer.classList.remove('opacity-100');
+        setTimeout(() => toastContainer.classList.add('hidden'), 300);
+    }, duration);
+}
+
+/**
+ * Calculates the base score for a fighter based on Steam and Metacritic reviews.
+ * @param {object} fighterObject - The fighter data object.
+ * @returns {number} The calculated raw score.
+ */
+export function calculateRawScore(fighterObject) {
+    if (!fighterObject || !fighterObject.scores) return 0;
+    const metacriticInput = fighterObject.scores.metacritic;
+    const metacriticScore = (metacriticInput !== '404' && metacriticInput) ? parseFloat(metacriticInput) / 10.0 : 0;
+    let totalScore = 0, weightCount = 0;
+
+    if (fighterObject.steamData) {
+        const steamReviewData = fighterObject.steamData;
+        const communityScore = (steamReviewData.total_reviews > 0) ? (steamReviewData.total_positive / steamReviewData.total_reviews) * 10 : 0;
+        
+        if (communityScore > 0) {
+            totalScore += communityScore * 0.70;
+            weightCount += 0.70;
+        }
+        if (metacriticScore > 0) {
+            totalScore += metacriticScore * 0.30;
+            weightCount += 0.30;
+        }
+    } else if (metacriticScore > 0) { // Fallback if no steam data
+        totalScore = metacriticScore;
+        weightCount = 1;
+    }
+    return weightCount > 0 ? totalScore / weightCount : 0;
+}
+

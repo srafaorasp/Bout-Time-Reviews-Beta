@@ -1,6 +1,6 @@
-import { state, dom, createNewFighter, updateFighterInUniverse, saveUniverseToLocalStorage, GENRE_SYMBOLS, PAST_TITLE_SYMBOLS, GRAND_SLAM_SYMBOL, HALL_OF_FAME_SYMBOL, addFighterToUniverse, loadRoster, updateTimestamp, setSelectedTitle } from './state.js';
-import { calculateRawScore, applyBonuses, getWeightClass } from './fight.js';
-import { downloadJSON } from './utils.js';
+import { state, dom, createNewFighter, updateFighterInUniverse, saveUniverseToLocalStorage, GENRE_SYMBOLS, PAST_TITLE_SYMBOLS, GRAND_SLAM_SYMBOL, HALL_OF_FAME_SYMBOL, addFighterToUniverse, loadRoster, updateTimestamp, setSelectedTitle, titlePriority } from './state.js';
+import { applyBonuses, getWeightClass } from './fight.js';
+import { downloadJSON, showToast, calculateRawScore } from './utils.js';
 import { fetchWithProxyRotation, STEAMSPY_API_URL } from './api.js';
 
 // --- UI & DISPLAY FUNCTIONS ---
@@ -11,20 +11,6 @@ function getStaminaModifiers(stamina) {
     if (stamina >= 75) return { state: 'ENERGIZED', color: 'text-green-400' };
     if (stamina >= 30) return { state: 'WINDED', color: 'text-yellow-400' };
     return { state: 'EXHAUSTED', color: 'text-red-500' };
-}
-
-
-export function showToast(message, duration = 5000) {
-    const toast = dom.toast;
-    if (!toast || !toast.container || !toast.message) return;
-    toast.message.textContent = message;
-    toast.container.classList.remove('hidden');
-    toast.container.classList.add('opacity-100');
-    
-    setTimeout(() => {
-        toast.container.classList.remove('opacity-100');
-        setTimeout(() => toast.container.classList.add('hidden'), 300);
-    }, duration);
 }
 
 export function showConfirmationModal(title, message) {
@@ -54,6 +40,52 @@ export function showConfirmationModal(title, message) {
         modal.cancelBtn.addEventListener('click', cancelHandler, { once: true });
 
         modal.modal.classList.remove('hidden');
+    });
+}
+
+export function showRivalPromotionModal(fighterData) {
+    return new Promise(resolve => {
+        const modal = dom.rivalPromotionModal;
+        const majorChampKeys = ['featherweight', 'cruiserweight', 'heavyweight', 'interGenre', 'undisputed'];
+        const isMajorChamp = majorChampKeys.includes(fighterData.homeChampionStatus) || fighterData.homeChampionStatus === 'undisputed';
+
+        modal.fighterName.textContent = fighterData.name;
+        modal.rivalId.textContent = fighterData.universeId;
+        modal.homeId.textContent = state.universeId;
+        
+        if (fighterData.homeChampionStatus !== 'contender') {
+            modal.homeTitle.textContent = `(${fighterData.homeChampionStatus.charAt(0).toUpperCase() + fighterData.homeChampionStatus.slice(1)} Champion)`;
+            modal.homeTitle.classList.remove('hidden');
+        } else {
+            modal.homeTitle.classList.add('hidden');
+        }
+
+        if (isMajorChamp) {
+            modal.visitBtn.textContent = 'Visit (Inter-Universe Title Contender!)';
+        } else {
+            modal.visitBtn.textContent = 'Visit as Contender';
+        }
+
+        modal.modal.classList.remove('hidden');
+
+        const visitHandler = () => {
+            modal.modal.classList.add('hidden');
+            cleanup();
+            resolve('visit');
+        };
+        const joinHandler = () => {
+            modal.modal.classList.add('hidden');
+            cleanup();
+            resolve('join');
+        };
+
+        const cleanup = () => {
+            modal.visitBtn.removeEventListener('click', visitHandler);
+            modal.joinBtn.removeEventListener('click', joinHandler);
+        };
+
+        modal.visitBtn.addEventListener('click', visitHandler, { once: true });
+        modal.joinBtn.addEventListener('click', joinHandler, { once: true });
     });
 }
 
@@ -90,6 +122,7 @@ export function updateScoresAndDisplay() {
     calculateAndDisplayOdds();
     updateRoundsDisplay();
     updateCommonGenresDisplay();
+    updateChampionsDisplay(); // Call this to handle visibility of Inter-Universe champ
 
     dom.center.finalScore1.textContent = state.score1.toFixed(2);
     dom.center.finalScore2.textContent = state.score2.toFixed(2);
@@ -185,7 +218,7 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
             dom.center.winnerBox.title.textContent = "It's a Draw?!";
             dom.center.winnerBox.text.textContent = `The judges have scored it even after ${finalRound} rounds.`;
             import('./sound.js').then(sound => sound.playBellSequence(3));
-            return; // Exit early for a draw
+            return;
         }
 
         if (winnerFighter) {
@@ -213,38 +246,49 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
         dom.center.winnerBox.text.textContent = `Won by ${winType} in Round ${finalRound}`;
 
         if (state.selectedTitleForFight !== 'none' && winnerName && winnerName !== 'draw') {
-             const winnerStatusBefore = getChampionStatus(winnerName);
+            const winnerStatusBefore = getChampionStatus(winnerFighter);
+            const loserStatusBefore = getChampionStatus(loserFighter);
+            const selectedTitle = state.selectedTitleForFight;
 
-            // Add to past titles FIRST, before vacating.
-            winnerFighter.record.pastTitles = winnerFighter.record.pastTitles || {};
-            winnerFighter.record.pastTitles[state.selectedTitleForFight] = (winnerFighter.record.pastTitles[state.selectedTitleForFight] || 0) + 1;
-
-            if (winnerStatusBefore.status !== 'contender' && winnerStatusBefore.status !== state.selectedTitleForFight) {
-                const previousTitleKey = winnerStatusBefore.status === 'local' ? winnerStatusBefore.key : winnerStatusBefore.status;
-                if(previousTitleKey) { // Ensure key exists
-                    winnerFighter.record.pastTitles[previousTitleKey] = (winnerFighter.record.pastTitles[previousTitleKey] || 0) + 1;
+            if (selectedTitle === 'interUniverse') {
+                const titleName = `Inter-Universe Champion (${winnerFighter.universeId} vs ${loserFighter.universeId})`;
+                winnerFighter.record.pastTitles = winnerFighter.record.pastTitles || {};
+                winnerFighter.record.pastTitles[titleName] = (winnerFighter.record.pastTitles[titleName] || 0) + 1;
+                state.roster.interUniverseChampion.name = winnerName;
+                state.roster.interUniverseChampion.data = JSON.parse(JSON.stringify(winnerFighter));
+                bellCount = 8;
+            } else {
+                 if (loserStatusBefore.status !== 'contender') {
+                    const lostTitleKey = loserStatusBefore.status === 'local' ? loserStatusBefore.key : loserStatusBefore.status;
+                    loserFighter.record.pastTitles = loserFighter.record.pastTitles || {};
+                    loserFighter.record.pastTitles[lostTitleKey] = (loserFighter.record.pastTitles[lostTitleKey] || 0) + 1;
+                }
+    
+                if (winnerStatusBefore.status !== 'contender' && winnerStatusBefore.status !== selectedTitle) {
+                    const oldTitleKey = winnerStatusBefore.status === 'local' ? winnerStatusBefore.key : winnerStatusBefore.status;
+                    if (oldTitleKey) {
+                        winnerFighter.record.pastTitles = winnerFighter.record.pastTitles || {};
+                        winnerFighter.record.pastTitles[oldTitleKey] = (winnerFighter.record.pastTitles[oldTitleKey] || 0) + 1;
+                    }
+                }
+                
+                const winnerData = JSON.parse(JSON.stringify(winnerFighter));
+                
+                vacateAllTitles(winnerFighter.name);
+                vacateAllTitles(loserFighter.name);
+                
+                if (state.roster.major[selectedTitle]) {
+                    state.roster.major[selectedTitle].name = winnerName;
+                    state.roster.major[selectedTitle].data = winnerData;
+                    bellCount = selectedTitle === 'undisputed' ? 6 : 4;
+                } else if (state.roster.local[selectedTitle]) {
+                    state.roster.local[selectedTitle].name = winnerName;
+                    state.roster.local[selectedTitle].data = winnerData;
+                    bellCount = 3;
                 }
             }
             
-            const winnerData = JSON.parse(JSON.stringify(winnerFighter));
-            const selectedTitle = state.selectedTitleForFight;
-            
-            // Vacate all titles from both fighters first to handle unifications correctly.
-            vacateAllTitles(winnerFighter.name);
-            vacateAllTitles(loserFighter.name);
-            
-            // Now, crown the new champion.
-            if (state.roster.major[selectedTitle]) {
-                state.roster.major[selectedTitle].name = winnerName;
-                state.roster.major[selectedTitle].data = winnerData;
-                bellCount = selectedTitle === 'undisputed' ? 6 : 4;
-            } else if (state.roster.local[selectedTitle]) {
-                state.roster.local[selectedTitle].name = winnerName;
-                state.roster.local[selectedTitle].data = winnerData;
-                bellCount = 3;
-            }
-            
-            const titleObject = state.roster.major[selectedTitle] || state.roster.local[selectedTitle];
+            const titleObject = state.roster.major[selectedTitle] || state.roster.local[selectedTitle] || (selectedTitle === 'interUniverse' && state.roster.interUniverseChampion);
             const titleName = selectedTitle.replace('interGenre','INTER-GENRE').toUpperCase();
             const modalAnnouncement = `A New ${titleName} CHAMPION!`;
             const mainScreenAnnouncement = `${titleObject.symbol} A New ${titleName.charAt(0) + titleName.slice(1).toLowerCase()} Champion! ${titleObject.symbol}`;
@@ -258,14 +302,14 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
             dom.center.titleMatchAnnouncement.innerHTML = mainScreenAnnouncement;
         }
         
-        // Update universe data after title changes
-        updateFighterInUniverse(winnerFighter);
-        updateFighterInUniverse(loserFighter);
+        if (!winnerFighter.isVisitor) updateFighterInUniverse(winnerFighter);
+        if (!loserFighter.isVisitor) updateFighterInUniverse(loserFighter);
+
 
         import('./sound.js').then(s => s.playBellSequence(bellCount));
         
-        const finalWinnerTitleInfo = getFighterTitleInfo(winnerFighter.name);
-        const finalLoserTitleInfo = getFighterTitleInfo(loserFighter.name);
+        const finalWinnerTitleInfo = getFighterTitleInfo(winnerFighter);
+        const finalLoserTitleInfo = getFighterTitleInfo(loserFighter);
         const winnerTitleEl = winnerIsFighter1 ? dom.fightModal.fighter1.title : dom.fightModal.fighter2.title;
         const loserTitleEl = winnerIsFighter1 ? dom.fightModal.fighter2.title : dom.fightModal.fighter1.title;
         
@@ -286,7 +330,6 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
         console.error("Error during displayFightWinner:", error);
         showToast("An error occurred ending the fight. Please check console.", 5000);
     } finally {
-        // This code will run regardless of whether an error occurred.
         dom.fightModal.returnBtn.classList.remove('hidden');
         dom.center.fightBtn.classList.add('hidden'); 
         dom.center.swapBtn.classList.add('hidden');
@@ -303,10 +346,24 @@ export function logFightMessage(html) {
 
 
 // --- HELPER & ADDITIONAL UI FUNCTIONS ---
-function getFighterTitleInfo(name) {
-    if (!name || name === '' || name === 'Vacant') return null;
+function getFighterTitleInfo(fighter) {
+    if (!fighter || !fighter.name || fighter.name === '' || fighter.name === 'Vacant') return null;
     
-    const majorChampInfo = getMajorChampionInfo(name);
+    // For visitors, show their home universe title
+    if (fighter.isVisitor && fighter.homeChampionStatus && fighter.homeChampionStatus !== 'contender') {
+        const status = fighter.homeChampionStatus;
+        const titleName = status.charAt(0).toUpperCase() + status.slice(1);
+        // We don't know the symbol from the visitor's universe, so use a generic one
+        const symbol = '✈️'; 
+        return { symbol, title: `${titleName} Champ (Visitor)` };
+    }
+
+    // For home fighters, check the roster
+    if (state.roster.interUniverseChampion.name === fighter.name) {
+        return { symbol: state.roster.interUniverseChampion.symbol, title: 'Inter-Universe Champion' };
+    }
+
+    const majorChampInfo = getMajorChampionInfo(fighter.name);
     if (majorChampInfo) {
         let titleText = '';
         switch(majorChampInfo.type) {
@@ -320,7 +377,7 @@ function getFighterTitleInfo(name) {
         return { symbol: state.roster.major[majorChampInfo.type].symbol, title: titleText };
     }
 
-    const localChampInfo = getLocalChampionInfo(name);
+    const localChampInfo = getLocalChampionInfo(fighter.name);
     if (localChampInfo) {
         const titleText = `${localChampInfo.key.charAt(0).toUpperCase() + localChampInfo.key.slice(1)} Champ`;
         return { symbol: localChampInfo.symbol, title: titleText };
@@ -331,6 +388,9 @@ function getFighterTitleInfo(name) {
 
 function getPastTitleSymbol(fighter) {
     const pastTitles = fighter.record.pastTitles || {};
+     if (Object.keys(pastTitles).some(key => key.startsWith('Inter-Universe Champion'))) {
+        return PAST_TITLE_SYMBOLS.interUniverse;
+    }
     if (pastTitles.undisputed) {
         return PAST_TITLE_SYMBOLS.undisputed;
     }
@@ -344,14 +404,20 @@ function getPastTitleSymbol(fighter) {
     return '';
 }
 
-export function getChampionStatus(fighterName) {
-    if (!fighterName || fighterName === 'Vacant') return { status: 'contender' };
-    if (state.roster.major.undisputed.name === fighterName) return { status: 'undisputed' };
+export function getChampionStatus(fighter) {
+    if (!fighter || !fighter.name || fighter.name === 'Vacant') return { status: 'contender' };
+    
+    if (fighter.isVisitor) {
+        return { status: fighter.homeChampionStatus || 'contender' };
+    }
+
+    if (state.roster.interUniverseChampion.name === fighter.name) return { status: 'interUniverse' };
+    if (state.roster.major.undisputed.name === fighter.name) return { status: 'undisputed' };
     for (const key in state.roster.major) {
-        if (state.roster.major[key].name === fighterName) return { status: key };
+        if (state.roster.major[key].name === fighter.name) return { status: key };
     }
     for (const key in state.roster.local) {
-        if (state.roster.local[key].name === fighterName) return { status: 'local', key: key };
+        if (state.roster.local[key].name === fighter.name) return { status: 'local', key: key };
     }
     return { status: 'contender' };
 }
@@ -385,13 +451,12 @@ export function updateFightUI(health1, stamina1, health2, stamina2) {
 
 
 export function displayInitialFighterTitles() {
-    const titleInfo1 = getFighterTitleInfo(state.fighter1.name);
-    const titleInfo2 = getFighterTitleInfo(state.fighter2.name);
+    const titleInfo1 = getFighterTitleInfo(state.fighter1);
+    const titleInfo2 = getFighterTitleInfo(state.fighter2);
     
     dom.fightModal.fighter1.title.innerHTML = titleInfo1 ? `<span title="${titleInfo1.title}">${titleInfo1.symbol} ${titleInfo1.title} ${titleInfo1.symbol}</span>` : '';
     dom.fightModal.fighter2.title.innerHTML = titleInfo2 ? `<span title="${titleInfo2.title}">${titleInfo2.symbol} ${titleInfo2.title} ${titleInfo2.symbol}</span>` : '';
     
-    // Reset animation classes
     dom.fightModal.fighter1.title.className = 'fighter-title-display h-6 text-sm font-semibold text-amber-400';
     dom.fightModal.fighter2.title.className = 'fighter-title-display h-6 text-sm font-semibold text-amber-400';
     dom.fightModal.titleBoutDisplay.innerHTML = '';
@@ -402,8 +467,8 @@ export async function animateTitleBout() {
     if (!state.selectedTitleForFight || state.selectedTitleForFight === 'none' || state.fightCancellationToken.cancelled) return;
 
     const titleKey = state.selectedTitleForFight;
-    const status1 = getChampionStatus(state.fighter1.name);
-    const status2 = getChampionStatus(state.fighter2.name);
+    const status1 = getChampionStatus(state.fighter1);
+    const status2 = getChampionStatus(state.fighter2);
 
     if (status1.status !== 'contender') {
         dom.fightModal.fighter1.title.classList.add('animate-title-from-left');
@@ -415,11 +480,12 @@ export async function animateTitleBout() {
     await import('./utils.js').then(u => u.delay(750));
     if (state.fightCancellationToken.cancelled) return;
 
-    const titleObject = state.roster.major[titleKey] || state.roster.local[titleKey];
+    const titleObject = state.roster.major[titleKey] || state.roster.local[titleKey] || (titleKey === 'interUniverse' && state.roster.interUniverseChampion);
     if (titleObject) {
         const titleName = titleKey.toUpperCase().replace("-", " ");
         let announcement = `FOR THE ${titleName} TITLE!`;
         if(titleKey === 'undisputed') announcement = 'FOR THE UNDISPUTED CHAMPIONSHIP!';
+        if(titleKey === 'interUniverse') announcement = 'FOR THE INTER-UNIVERSE CHAMPIONSHIP!';
         dom.fightModal.titleBoutDisplay.innerHTML = `<span class="title-fanfare">${announcement}</span>`;
     }
 }
@@ -485,22 +551,10 @@ function updateCommonGenresDisplay() {
 
 function updateChampionSymbols() {
     if (!state.fighter1 || !state.fighter2) return;
-    const f1Status = getChampionStatus(state.fighter1.name);
-    const f2Status = getChampionStatus(state.fighter2.name);
-    let f1Symbol = '', f2Symbol = '';
-
-    if (f1Status.status !== 'contender') {
-        const titleKey = f1Status.status === 'local' ? f1Status.key : f1Status.status;
-        const titleObj = state.roster.major[titleKey] || state.roster.local[titleKey];
-        if (titleObj) f1Symbol = titleObj.symbol;
-    }
-    if (f2Status.status !== 'contender') {
-        const titleKey = f2Status.status === 'local' ? f2Status.key : f2Status.status;
-        const titleObj = state.roster.major[titleKey] || state.roster.local[titleKey];
-        if (titleObj) f2Symbol = titleObj.symbol;
-    }
-    dom.cards.item1.symbol.textContent = f1Symbol;
-    dom.cards.item2.symbol.textContent = f2Symbol;
+    const f1TitleInfo = getFighterTitleInfo(state.fighter1);
+    const f2TitleInfo = getFighterTitleInfo(state.fighter2);
+    dom.cards.item1.symbol.textContent = f1TitleInfo ? f1TitleInfo.symbol : '';
+    dom.cards.item2.symbol.textContent = f2TitleInfo ? f2TitleInfo.symbol : '';
 }
 
 function updateRoundsDisplay() {
@@ -508,7 +562,8 @@ function updateRoundsDisplay() {
     const isTitleMatch = state.selectedTitleForFight !== 'none';
     let rounds = 6;
     if (isTitleMatch && !isLowCard) {
-        if (state.selectedTitleForFight === 'undisputed') rounds = 12;
+        if (state.selectedTitleForFight === 'interUniverse') rounds = 15;
+        else if (state.selectedTitleForFight === 'undisputed') rounds = 12;
         else if (state.roster.major[state.selectedTitleForFight]) rounds = 10;
         else if (state.roster.local[state.selectedTitleForFight]) rounds = 8;
     }
@@ -546,7 +601,7 @@ function updateTitleAvailability() {
     } else {
         dom.center.titleSelectBtn.classList.add('hidden');
         if (state.selectedTitleForFight !== 'none') {
-            setSelectedTitle('none'); // Reset if matchup invalidates title
+            setSelectedTitle('none');
         }
     }
 }
@@ -554,7 +609,7 @@ function updateTitleAvailability() {
 export function updateTitleMatchAnnouncement() {
      if (state.selectedTitleForFight !== 'none') {
         const titleKey = state.selectedTitleForFight;
-        const titleObject = state.roster.major[titleKey] || state.roster.local[titleKey];
+        const titleObject = state.roster.major[titleKey] || state.roster.local[titleKey] || (titleKey === 'interUniverse' && state.roster.interUniverseChampion);
         if(titleObject) {
             const titleName = titleKey.charAt(0).toUpperCase() + titleKey.slice(1).replace('interGenre', 'Inter-Genre');
             dom.center.titleMatchAnnouncement.innerHTML = `<span class="title-fanfare">${titleObject.symbol} ${titleName} Title Bout ${titleObject.symbol}</span>`;
@@ -599,7 +654,7 @@ export function populateUniverseSelectors() {
             if(hasAchievedGrandSlam(fighter)) {
                 prefix += `${GRAND_SLAM_SYMBOL} `;
             }
-            const currentTitleInfo = getFighterTitleInfo(fighter.name);
+            const currentTitleInfo = getFighterTitleInfo(fighter);
             if (currentTitleInfo) {
                 prefix = `${currentTitleInfo.symbol} ` + prefix;
             } else {
@@ -619,7 +674,13 @@ export function populateUniverseSelectors() {
 }
 
 export function updateChampionsDisplay() {
-    const { major } = state.roster;
+    const { major, interUniverseChampion } = state.roster;
+    
+    const isInterUniverseRelevant = interUniverseChampion.name !== 'Vacant' || getAvailableTitleFights(state.fighter1, state.fighter2).some(t => t.key === 'interUniverse');
+    dom.center.interUniverseChampDisplay.classList.toggle('hidden', !isInterUniverseRelevant);
+
+    dom.center.interUniverseChamp.textContent = interUniverseChampion.name;
+    dom.center.interUniverseChamp.title = interUniverseChampion.name;
     dom.center.featherweightChamp.textContent = major.featherweight.name;
     dom.center.featherweightChamp.title = major.featherweight.name;
     dom.center.cruiserweightChamp.textContent = major.cruiserweight.name;
@@ -635,7 +696,7 @@ export function updateChampionsDisplay() {
 export function populateSetupPanel() {
     const { potentialMatchupsList, potentialTitlesList, ...panel } = dom.setupPanel;
     
-    // Clear and populate static parts of the panel
+    panel.universeIdDisplay.textContent = state.universeId;
     panel.championList.innerHTML = '';
     panel.localChampionList.innerHTML = '';
     panel.universeFighterList.innerHTML = '';
@@ -645,6 +706,11 @@ export function populateSetupPanel() {
     panel.tappedGenresList.innerHTML = '';
 
     const sortedFighters = [...state.universeFighters].sort((a, b) => a.name.localeCompare(b.name));
+
+    const interUniverseChamp = state.roster.interUniverseChampion;
+    if (interUniverseChamp && interUniverseChamp.name !== 'Vacant') {
+        panel.championList.innerHTML += `<div class="flex items-center justify-between bg-gray-900 p-1 rounded"><span class="font-semibold">${interUniverseChamp.symbol} Inter-Universe:</span><span class="truncate" title="${interUniverseChamp.name}">${interUniverseChamp.name}</span></div>`;
+    }
 
     Object.entries(state.roster.major).forEach(([key, title]) => {
         const titleName = key.charAt(0).toUpperCase() + key.slice(1).replace('interGenre', 'Inter-Genre');
@@ -685,10 +751,7 @@ export function populateSetupPanel() {
     });
     if (panel.untappedGenresList.innerHTML === '') panel.untappedGenresList.innerHTML = `<p class="text-xs text-gray-500 text-center">No untapped genres.</p>`;
     if (panel.tappedGenresList.innerHTML === '') panel.tappedGenresList.innerHTML = `<p class="text-xs text-gray-500 text-center">No existing titles to expand.</p>`;
-
-    // --- NEW LOGIC FOR POTENTIAL FIGHTS ---
     
-    // 1. Calculate all potential matchups and title fights
     const allPotentialMatchups = [];
     const allPotentialTitles = [];
     for (let i = 0; i < activeFighters.length; i++) {
@@ -709,7 +772,6 @@ export function populateSetupPanel() {
         }
     }
 
-    // 2. Populate Close Matchups (unchanged)
     allPotentialMatchups.sort((a, b) => a.scoreDiff - b.scoreDiff);
     potentialMatchupsList.innerHTML = '';
     allPotentialMatchups.slice(0, 10).forEach(match => {
@@ -717,7 +779,6 @@ export function populateSetupPanel() {
     });
     if (potentialMatchupsList.innerHTML === '') potentialMatchupsList.innerHTML = `<p class="text-center text-gray-500 text-xs">No close matchups found.</p>`;
 
-    // 3. Find the single best matchup for each title
     const bestMatchForTitle = new Map();
     allPotentialTitles.forEach(match => {
         const titleKey = match.title.key;
@@ -726,12 +787,10 @@ export function populateSetupPanel() {
         }
     });
 
-    // 4. Build the final display list according to the new priority
     const displayList = [];
     const addedMatches = new Set();
-    const titleOrder = ['undisputed', 'interGenre', 'heavyweight', 'cruiserweight', 'featherweight', ...Object.keys(state.roster.local).sort()];
+    const titleOrder = ['interUniverse', 'undisputed', 'interGenre', 'heavyweight', 'cruiserweight', 'featherweight', ...Object.keys(state.roster.local).sort()];
     
-    // Add the "best" matches first
     titleOrder.forEach(titleKey => {
         if (bestMatchForTitle.has(titleKey)) {
             const bestMatch = bestMatchForTitle.get(titleKey);
@@ -743,9 +802,7 @@ export function populateSetupPanel() {
         }
     });
 
-    // 5. Fill remaining slots with other good title fights
     if (displayList.length < 10) {
-        const titlePriority = { undisputed: 0, interGenre: 1, heavyweight: 1, cruiserweight: 1, featherweight: 1 };
         allPotentialTitles.sort((a, b) => {
             const priorityA = titlePriority[a.title.key] ?? 2;
             const priorityB = titlePriority[b.title.key] ?? 2;
@@ -763,7 +820,6 @@ export function populateSetupPanel() {
         }
     }
     
-    // 6. Render the final list
     potentialTitlesList.innerHTML = '';
     displayList.slice(0, 10).forEach(match => {
         potentialTitlesList.innerHTML += `<div class="bg-gray-900 p-1 rounded text-xs flex justify-between items-center"><span class="truncate pr-2" title="${match.f1.name} vs ${match.f2.name} for ${match.title.name}">${match.title.name}</span><button class="load-match-btn bg-amber-600 hover:bg-amber-700 text-white px-2 py-0.5 rounded" data-f1-id="${match.f1.appId}" data-f2-id="${match.f2.appId}" data-titles='${JSON.stringify([match.title])}'>Load</button></div>`;
@@ -793,18 +849,16 @@ export function swapCards() {
 }
 
 function getAvailableTitleFights(fighter1, fighter2) {
-    // This logic is ported from the original single-file version for correctness.
     if (!fighter1 || !fighter1.name || !fighter2 || !fighter2.name || fighter1.isRetired || fighter2.isRetired) return [];
 
-    const status1 = getChampionStatus(fighter1.name);
-    const status2 = getChampionStatus(fighter2.name);
+    const status1 = getChampionStatus(fighter1);
+    const status2 = getChampionStatus(fighter2);
     const rawScore1 = calculateRawScore(fighter1);
     const rawScore2 = calculateRawScore(fighter2);
     const weightClass1 = getWeightClass(rawScore1);
     const weightClass2 = getWeightClass(rawScore2);
     const fighter1Genres = fighter1.genres || [];
     const fighter2Genres = fighter2.genres || [];
-
     const available = [];
     const majorChampKeys = ['featherweight', 'cruiserweight', 'heavyweight', 'interGenre'];
     const f1IsMajorChamp = majorChampKeys.includes(status1.status);
@@ -812,10 +866,28 @@ function getAvailableTitleFights(fighter1, fighter2) {
     const f1IsLocalChamp = status1.status === 'local';
     const f2IsLocalChamp = status2.status === 'local';
 
-    // Helper to format the return object for consistency in the new modular structure.
     const formatTitle = (key, name, symbol) => ({ key, name, symbol });
 
-    // 1. Undisputed Title Unification/Defense - This now correctly returns immediately.
+    if (fighter1.isVisitor && !fighter2.isVisitor) {
+        const visitorStatus = getChampionStatus(fighter1);
+        if((visitorStatus.status === 'undisputed' || majorChampKeys.includes(visitorStatus.status))) {
+             if(status2.status ==='undisputed' || (majorChampKeys.includes(status2.status) && (titlePriority[status2.status] <= titlePriority[visitorStatus.status]))) {
+                 return [formatTitle('interUniverse', `🌌 For the INTER-UNIVERSE Title! 🌌`, state.roster.interUniverseChampion.symbol)];
+            }
+        }
+    }
+     if (fighter2.isVisitor && !fighter1.isVisitor) {
+        const visitorStatus = getChampionStatus(fighter2);
+        if(visitorStatus.status === 'undisputed' || majorChampKeys.includes(visitorStatus.status)) {
+            if(status1.status ==='undisputed' || (majorChampKeys.includes(status1.status) && (titlePriority[status1.status] <= titlePriority[visitorStatus.status]))) {
+                 return [formatTitle('interUniverse', `🌌 For the INTER-UNIVERSE Title! 🌌`, state.roster.interUniverseChampion.symbol)];
+            }
+        }
+    }
+
+
+    if (fighter1.isVisitor || fighter2.isVisitor) return [];
+
     if (state.roster.major.undisputed.name === 'Vacant') {
         if (f1IsMajorChamp && f2IsMajorChamp && status1.status !== status2.status) {
             const symbol = state.roster.major.undisputed.symbol;
@@ -831,7 +903,6 @@ function getAvailableTitleFights(fighter1, fighter2) {
         }
     }
 
-    // 2. Inter-Genre Title
     if (state.roster.major.interGenre.name === 'Vacant') {
         if (f1IsLocalChamp && f2IsLocalChamp) {
             const symbol = state.roster.major.interGenre.symbol;
@@ -847,7 +918,6 @@ function getAvailableTitleFights(fighter1, fighter2) {
         }
     }
 
-    // 3. Weight Class Titles
     if (weightClass1 === weightClass2 && weightClass1 !== 'Unranked') {
         const wcKey = weightClass1.toLowerCase();
         if (state.roster.major[wcKey]) {
@@ -865,7 +935,6 @@ function getAvailableTitleFights(fighter1, fighter2) {
         }
     }
 
-    // 4. Local Titles
     if (status1.status === 'contender' && status2.status === 'contender') {
         Object.keys(state.roster.local)
             .filter(key => state.roster.local[key].name === 'Vacant')
@@ -894,7 +963,6 @@ function getAvailableTitleFights(fighter1, fighter2) {
         }
     }
 
-    // Remove duplicates that might arise from different logic paths
     const uniqueKeys = new Set();
     return available.filter(el => {
         const isDuplicate = uniqueKeys.has(el.key);
@@ -906,7 +974,7 @@ function getAvailableTitleFights(fighter1, fighter2) {
 
 export function openTitleSelectionModal(specificTitles = null) {
     const container = dom.titleSelectModal.optionsContainer;
-    container.innerHTML = ''; // Clear previous options
+    container.innerHTML = '';
 
     const availableTitles = specificTitles || getAvailableTitleFights(state.fighter1, state.fighter2);
 
@@ -935,7 +1003,7 @@ export function applyRosterChanges() {
     saveUniverseToLocalStorage();
     updateChampionsDisplay();
     updateScoresAndDisplay();
-    populateSetupPanel(); // Re-populate to reflect changes
+    populateSetupPanel();
     dom.setupPanel.panel.classList.add('hidden');
 }
 
@@ -983,25 +1051,23 @@ export function populateAndShowFighterModal(fighter) {
 
     const modal = dom.fighterInfoModal;
     modal.name.textContent = fighter.name;
+    modal.universeId.textContent = fighter.universeId || 'N/A';
     
-    // --- Populate View State ---
     modal.recordView.textContent = `${fighter.record.tko}-${fighter.record.ko}-${fighter.record.losses}`;
     modal.weightClassView.textContent = getWeightClass(calculateRawScore(fighter));
     modal.devView.textContent = fighter.devHouse || 'N/A';
     modal.publisherView.textContent = fighter.publisher || 'N/A';
     modal.genresView.innerHTML = (fighter.genres || []).map(g => `<span class="bg-gray-700 text-xs font-semibold px-2 py-1 rounded-full">${g}</span>`).join('') || 'None listed';
 
-    // --- Populate Edit State ---
     modal.tkoInput.value = fighter.record.tko || 0;
     modal.koInput.value = fighter.record.ko || 0;
     modal.lossesInput.value = fighter.record.losses || 0;
 
-    // --- Populate Title History (for both view and edit) ---
     let historyHtml = '';
-    const currentStatus = getChampionStatus(fighter.name);
+    const currentStatus = getChampionStatus(fighter);
     if (currentStatus.status !== 'contender') {
         const titleKey = currentStatus.status === 'local' ? currentStatus.key : currentStatus.status;
-        const titleObj = state.roster.major[titleKey] || state.roster.local[titleKey];
+        const titleObj = state.roster.major[titleKey] || state.roster.local[titleKey] || (titleKey === 'interUniverse' && state.roster.interUniverseChampion);
         historyHtml += `<p class="text-green-400">${titleObj.symbol} Current ${titleKey.charAt(0).toUpperCase() + titleKey.slice(1)} Champion</p>`;
         modal.vacateBtn.classList.remove('hidden');
     } else {
@@ -1011,7 +1077,7 @@ export function populateAndShowFighterModal(fighter) {
     if (fighter.record.pastTitles && Object.keys(fighter.record.pastTitles).length > 0) {
         Object.entries(fighter.record.pastTitles).forEach(([key, count]) => {
             const titleObject = state.roster.major[key] || state.roster.local[key] || {};
-            const symbol = titleObject.symbol || PAST_TITLE_SYMBOLS.local;
+            const symbol = titleObject.symbol || (key.startsWith('Inter-Universe') ? PAST_TITLE_SYMBOLS.interUniverse : PAST_TITLE_SYMBOLS.local);
             historyHtml += `<p>${symbol} Former ${key.charAt(0).toUpperCase() + key.slice(1)} Champion (${count}x)</p>`;
         });
     }
@@ -1025,7 +1091,6 @@ export function populateAndShowFighterModal(fighter) {
     }
     modal.titleHistoryView.innerHTML = historyHtml || '<p class="text-gray-500">No title history.</p>';
 
-    // Populate the editable title history
     const editor = modal.titleHistoryEdit;
     editor.innerHTML = '';
     const allTitles = {...state.roster.major, ...state.roster.local };
@@ -1040,7 +1105,6 @@ export function populateAndShowFighterModal(fighter) {
         `;
     });
 
-    // Set initial state to "view"
     setFighterModalState('view');
     modal.modal.classList.remove('hidden');
 }
@@ -1050,19 +1114,17 @@ export function setFighterModalState(mode) {
     const modal = dom.fighterInfoModal;
     const isEditMode = mode === 'edit';
     
-    // Toggle visibility of view/edit containers
     modal.viewState.classList.toggle('hidden', isEditMode);
     modal.editState.classList.toggle('hidden', !isEditMode);
     modal.titleHistoryView.classList.toggle('hidden', isEditMode);
     modal.titleHistoryEdit.classList.toggle('hidden', !isEditMode);
 
-    // Toggle button visibility
     modal.editBtn.classList.toggle('hidden', isEditMode);
     modal.saveBtn.classList.toggle('hidden', !isEditMode);
     modal.cancelBtn.classList.toggle('hidden', !isEditMode);
 
-    // Keep vacate button visible in both modes if applicable, but hide during edit
-    const isChampion = getChampionStatus(state.universeFighters.find(f => f.appId === state.currentRecordEditTarget)?.name).status !== 'contender';
+    const fighter = state.universeFighters.find(f => f.appId === state.currentRecordEditTarget);
+    const isChampion = fighter ? getChampionStatus(fighter).status !== 'contender' : false;
     modal.vacateBtn.classList.toggle('hidden', isEditMode || !isChampion);
 }
 
@@ -1106,7 +1168,7 @@ export async function openGenreExpansionModal(genre) {
             return;
         }
 
-        games.slice(0, 50).forEach(game => { // Limit to 50 results
+        games.slice(0, 50).forEach(game => {
             modal.list.innerHTML += `
                 <div class="flex items-center p-2 bg-gray-900 rounded-lg">
                     <input type="checkbox" data-appid="${game.appid}" class="h-4 w-4 rounded bg-gray-700 border-gray-600 text-amber-500 focus:ring-amber-400">
@@ -1137,24 +1199,6 @@ export async function openTop100Selection() {
     } else {
         modal.list.innerHTML = `<p class="text-center text-red-500">Failed to fetch Top 100 data.</p>`;
     }
-}
-
-export function showOriginLockoutModal(newFighterName, existingFighterName, origin) {
-     return new Promise(resolve => {
-        dom.originLockoutModal.newFighter.textContent = newFighterName;
-        dom.originLockoutModal.existingFighter.textContent = existingFighterName;
-        dom.originLockoutModal.origin.textContent = origin;
-        dom.originLockoutModal.modal.classList.remove('hidden');
-
-        dom.originLockoutModal.skipBtn.onclick = () => {
-            dom.originLockoutModal.modal.classList.add('hidden');
-            resolve('skip');
-        };
-        dom.originLockoutModal.keepBtn.onclick = () => {
-            dom.originLockoutModal.modal.classList.add('hidden');
-            resolve('keep');
-        };
-    });
 }
 
 export function clearBothCards() {
