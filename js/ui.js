@@ -1,4 +1,4 @@
-import { state, dom, createNewFighter, updateFighterInUniverse, saveUniverseToLocalStorage, GENRE_SYMBOLS, PAST_TITLE_SYMBOLS, GRAND_SLAM_SYMBOL, HALL_OF_FAME_SYMBOL, addFighterToUniverse, loadRoster, updateTimestamp, setSelectedTitle, titlePriority } from './state.js';
+import { state, dom, createNewFighter, updateFighterInUniverse, saveUniverseToLocalStorage, GENRE_SYMBOLS, PAST_TITLE_SYMBOLS, GRAND_SLAM_SYMBOL, HALL_OF_FAME_SYMBOL, addFighterToUniverse, loadRoster, updateTimestamp, setSelectedTitle, titlePriority, getInterUniverseTitleKey } from './state.js';
 import { applyBonuses, getWeightClass } from './fight.js';
 import { downloadJSON, showToast, calculateRawScore } from './utils.js';
 import { fetchWithProxyRotation, STEAMSPY_API_URL } from './api.js';
@@ -265,12 +265,16 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
             const loserStatusBefore = getChampionStatus(loserFighter);
             const selectedTitle = state.selectedTitleForFight;
 
-            if (selectedTitle === 'interUniverse') {
+            if (selectedTitle.startsWith('interUniverse--')) {
+                const titleKey = selectedTitle;
                 const titleName = `Inter-Universe Champion (${winnerFighter.universeId} vs ${loserFighter.universeId})`;
                 winnerFighter.record.pastTitles = winnerFighter.record.pastTitles || {};
                 winnerFighter.record.pastTitles[titleName] = (winnerFighter.record.pastTitles[titleName] || 0) + 1;
-                state.roster.interUniverseChampion.name = winnerName;
-                state.roster.interUniverseChampion.data = JSON.parse(JSON.stringify(winnerFighter));
+                
+                state.roster.interUniverseTitles[titleKey] = state.roster.interUniverseTitles[titleKey] || { name: 'Vacant', data: null, symbol: '🌌' };
+                state.roster.interUniverseTitles[titleKey].name = winnerName;
+                state.roster.interUniverseTitles[titleKey].data = JSON.parse(JSON.stringify(winnerFighter));
+
                 bellCount = 8;
             } else {
                  if (loserStatusBefore.status !== 'contender') {
@@ -303,8 +307,11 @@ export async function displayFightWinner(fightWinnerName, winType, finalRound) {
                 }
             }
             
-            const titleObject = state.roster.major[selectedTitle] || state.roster.local[selectedTitle] || (selectedTitle === 'interUniverse' && state.roster.interUniverseChampion);
-            const titleName = selectedTitle.replace('interGenre','INTER-GENRE').toUpperCase();
+            const titleObject = selectedTitle.startsWith('interUniverse--')
+                ? state.roster.interUniverseTitles[selectedTitle]
+                : (state.roster.major[selectedTitle] || state.roster.local[selectedTitle]);
+
+            const titleName = selectedTitle.startsWith('interUniverse--') ? 'Inter-Universe' : selectedTitle.replace('interGenre','INTER-GENRE').toUpperCase();
             const modalAnnouncement = `A New ${titleName} CHAMPION!`;
             const mainScreenAnnouncement = `${titleObject.symbol} A New ${titleName.charAt(0) + titleName.slice(1).toLowerCase()} Champion! ${titleObject.symbol}`;
             
@@ -374,8 +381,12 @@ function getFighterTitleInfo(fighter) {
     }
 
     // For home fighters, check the roster
-    if (state.roster.interUniverseChampion.name === fighter.name) {
-        return { symbol: state.roster.interUniverseChampion.symbol, title: 'Inter-Universe Champion' };
+    for (const key in state.roster.interUniverseTitles) {
+        const title = state.roster.interUniverseTitles[key];
+        if (title.name === fighter.name) {
+            const opponentUniverse = key.replace(fighter.universeId, '').replace('--', '');
+            return { symbol: title.symbol, title: `Inter-Universe Champion (vs. ${opponentUniverse.substring(0, 12)}...)` };
+        }
     }
 
     const majorChampInfo = getMajorChampionInfo(fighter.name);
@@ -423,10 +434,16 @@ export function getChampionStatus(fighter) {
     if (!fighter || !fighter.name || fighter.name === 'Vacant') return { status: 'contender' };
     
     if (fighter.isVisitor) {
-        return { status: fighter.homeChampionStatus || 'contender' };
+        // Ensure the status is lowercase to match our keys, and default to contender
+        const status = fighter.homeChampionStatus ? fighter.homeChampionStatus.toLowerCase() : 'contender';
+        return { status: status };
     }
 
-    if (state.roster.interUniverseChampion.name === fighter.name) return { status: 'interUniverse' };
+    for (const key in state.roster.interUniverseTitles) {
+        if (state.roster.interUniverseTitles[key].name === fighter.name) {
+            return { status: 'interUniverse', key: key };
+        }
+    }
     if (state.roster.major.undisputed.name === fighter.name) return { status: 'undisputed' };
     for (const key in state.roster.major) {
         if (state.roster.major[key].name === fighter.name) return { status: key };
@@ -495,12 +512,15 @@ export async function animateTitleBout() {
     await import('./utils.js').then(u => u.delay(750));
     if (state.fightCancellationToken.cancelled) return;
 
-    const titleObject = state.roster.major[titleKey] || state.roster.local[titleKey] || (titleKey === 'interUniverse' && state.roster.interUniverseChampion);
+    const titleObject = titleKey.startsWith('interUniverse--') 
+        ? state.roster.interUniverseTitles[titleKey]
+        : (state.roster.major[titleKey] || state.roster.local[titleKey]);
+
     if (titleObject) {
         const titleName = titleKey.toUpperCase().replace("-", " ");
         let announcement = `FOR THE ${titleName} TITLE!`;
         if(titleKey === 'undisputed') announcement = 'FOR THE UNDISPUTED CHAMPIONSHIP!';
-        if(titleKey === 'interUniverse') announcement = 'FOR THE INTER-UNIVERSE CHAMPIONSHIP!';
+        if(titleKey.startsWith('interUniverse--')) announcement = 'FOR THE INTER-UNIVERSE CHAMPIONSHIP!';
         dom.fightModal.titleBoutDisplay.innerHTML = `<span class="title-fanfare">${announcement}</span>`;
     }
 }
@@ -577,7 +597,7 @@ function updateRoundsDisplay() {
     const isTitleMatch = state.selectedTitleForFight !== 'none';
     let rounds = 6;
     if (isTitleMatch && !isLowCard) {
-        if (state.selectedTitleForFight === 'interUniverse') rounds = 15;
+        if (state.selectedTitleForFight.startsWith('interUniverse--')) rounds = 15;
         else if (state.selectedTitleForFight === 'undisputed') rounds = 12;
         else if (state.roster.major[state.selectedTitleForFight]) rounds = 10;
         else if (state.roster.local[state.selectedTitleForFight]) rounds = 8;
@@ -624,9 +644,13 @@ function updateTitleAvailability() {
 export function updateTitleMatchAnnouncement() {
      if (state.selectedTitleForFight !== 'none') {
         const titleKey = state.selectedTitleForFight;
-        const titleObject = state.roster.major[titleKey] || state.roster.local[titleKey] || (titleKey === 'interUniverse' && state.roster.interUniverseChampion);
+        const titleObject = titleKey.startsWith('interUniverse--')
+            ? state.roster.interUniverseTitles[titleKey]
+            : (state.roster.major[titleKey] || state.roster.local[titleKey]);
         if(titleObject) {
-            const titleName = titleKey.charAt(0).toUpperCase() + titleKey.slice(1).replace('interGenre', 'Inter-Genre');
+            const titleName = titleKey.startsWith('interUniverse--')
+                ? 'Inter-Universe'
+                : titleKey.charAt(0).toUpperCase() + titleKey.slice(1).replace('interGenre', 'Inter-Genre');
             dom.center.titleMatchAnnouncement.innerHTML = `<span class="title-fanfare">${titleObject.symbol} ${titleName} Title Bout ${titleObject.symbol}</span>`;
         }
     } else {
@@ -689,13 +713,19 @@ export function populateUniverseSelectors() {
 }
 
 export function updateChampionsDisplay() {
-    const { major, interUniverseChampion } = state.roster;
+    const { major } = state.roster;
+    const iuTitleKey = getInterUniverseTitleKey(state.fighter1?.universeId, state.fighter2?.universeId);
+    const currentIUTitle = iuTitleKey ? (state.roster.interUniverseTitles[iuTitleKey] || { name: 'Vacant' }) : { name: 'Vacant' };
     
-    const isInterUniverseRelevant = interUniverseChampion.name !== 'Vacant' || getAvailableTitleFights(state.fighter1, state.fighter2).some(t => t.key === 'interUniverse');
+    const isInterUniverseRelevant = (state.fighter1?.isVisitor || state.fighter2?.isVisitor) && (state.fighter1?.universeId !== state.fighter2?.universeId);
+    
     dom.center.interUniverseChampDisplay.classList.toggle('hidden', !isInterUniverseRelevant);
-
-    dom.center.interUniverseChamp.textContent = interUniverseChampion.name;
-    dom.center.interUniverseChamp.title = interUniverseChampion.name;
+    
+    if(isInterUniverseRelevant) {
+        dom.center.interUniverseChamp.textContent = currentIUTitle.name;
+        dom.center.interUniverseChamp.title = currentIUTitle.name;
+    }
+    
     dom.center.featherweightChamp.textContent = major.featherweight.name;
     dom.center.featherweightChamp.title = major.featherweight.name;
     dom.center.cruiserweightChamp.textContent = major.cruiserweight.name;
@@ -722,10 +752,14 @@ export function populateSetupPanel() {
 
     const sortedFighters = [...state.universeFighters].sort((a, b) => a.name.localeCompare(b.name));
 
-    const interUniverseChamp = state.roster.interUniverseChampion;
-    if (interUniverseChamp && interUniverseChamp.name !== 'Vacant') {
-        panel.championList.innerHTML += `<div class="flex items-center justify-between bg-gray-900 p-1 rounded"><span class="font-semibold">${interUniverseChamp.symbol} Inter-Universe:</span><span class="truncate" title="${interUniverseChamp.name}">${interUniverseChamp.name}</span></div>`;
-    }
+    Object.entries(state.roster.interUniverseTitles).forEach(([key, title]) => {
+        if (title.name !== 'Vacant') {
+             const universes = key.split('--');
+             const opponentUniverse = universes.find(u => u !== state.universeId) || universes[1];
+             const titleDisplayName = `Inter-Universe (vs. ${opponentUniverse.substring(0, 8)}...)`;
+             panel.championList.innerHTML += `<div class="flex items-center justify-between bg-gray-900 p-1 rounded"><span class="font-semibold">${title.symbol} ${titleDisplayName}:</span><span class="truncate" title="${title.name}">${title.name}</span></div>`;
+        }
+    });
 
     Object.entries(state.roster.major).forEach(([key, title]) => {
         const titleName = key.charAt(0).toUpperCase() + key.slice(1).replace('interGenre', 'Inter-Genre');
@@ -871,45 +905,39 @@ function getAvailableTitleFights(fighter1, fighter2) {
     const formatTitle = (key, name, symbol) => ({ key, name, symbol });
     const majorChampKeys = ['undisputed', 'featherweight', 'cruiserweight', 'heavyweight', 'interGenre'];
 
-    const isMajorChampOrHigher = (status) => {
-        return majorChampKeys.includes(status);
-    };
-
-    // Determine if we have a visitor vs home situation
     const isF1Visitor = fighter1.isVisitor === true;
     const isF2Visitor = fighter2.isVisitor === true;
 
     // --- Inter-Universe Title Logic ---
-    if (isF1Visitor !== isF2Visitor) { // Exactly one must be a visitor
+    if (isF1Visitor !== isF2Visitor && fighter1.universeId && fighter2.universeId) {
         const visitor = isF1Visitor ? fighter1 : fighter2;
         const home = isF1Visitor ? fighter2 : fighter1;
 
         const visitorStatus = getChampionStatus(visitor).status;
         const homeStatus = getChampionStatus(home).status;
 
-        // Condition 1: Visitor must be a major or undisputed champion in their home universe.
-        if (!isMajorChampOrHigher(visitorStatus)) {
-            return []; // Visitor is not high-ranked enough, no titles available.
-        }
+        const isVisitorEligible = majorChampKeys.includes(visitorStatus);
+        const isHomeEligible = majorChampKeys.includes(homeStatus) || homeStatus === 'interUniverse';
 
-        // Condition 2: Home fighter must also be a major or undisputed champion.
-        if (!isMajorChampOrHigher(homeStatus)) {
-            return []; // Home fighter is not high-ranked enough, no titles available.
-        }
+        if (isVisitorEligible && isHomeEligible) {
+            const titleKey = getInterUniverseTitleKey(home.universeId, visitor.universeId);
+            if (!titleKey) return [];
 
-        // Condition 3: Home champion's title must have equal or higher prestige (lower or equal priority value).
-        if (titlePriority[homeStatus] <= titlePriority[visitorStatus]) {
-            return [formatTitle('interUniverse', `🌌 For the INTER-UNIVERSE Title! 🌌`, state.roster.interUniverseChampion.symbol)];
+            const iuTitle = state.roster.interUniverseTitles[titleKey] || { name: 'Vacant', symbol: '🌌' };
+
+            if (iuTitle.name === 'Vacant') {
+                return [formatTitle(titleKey, `🌌 For the vacant INTER-UNIVERSE Title! 🌌`, iuTitle.symbol)];
+            } else if (iuTitle.name === home.name) {
+                return [formatTitle(titleKey, `🌌 Defend the INTER-UNIVERSE Title! 🌌`, iuTitle.symbol)];
+            }
         }
         
-        // If prestige condition is not met, no titles are available.
         return [];
     }
 
     // --- Home Universe Title Logic ---
-    // This part runs only if both are home fighters (or both are visitors, which is an invalid match)
     if (isF1Visitor || isF2Visitor) {
-        return []; // No titles for visitor vs visitor matches.
+        return []; // Visitors cannot compete for home titles.
     }
     
     const status1 = getChampionStatus(fighter1);
@@ -1106,7 +1134,7 @@ export function populateAndShowFighterModal(fighter) {
     const currentStatus = getChampionStatus(fighter);
     if (currentStatus.status !== 'contender') {
         const titleKey = currentStatus.status === 'local' ? currentStatus.key : currentStatus.status;
-        const titleObj = state.roster.major[titleKey] || state.roster.local[titleKey] || (titleKey === 'interUniverse' && state.roster.interUniverseChampion);
+        const titleObj = state.roster.major[titleKey] || state.roster.local[titleKey] || (currentStatus.status === 'interUniverse' && state.roster.interUniverseTitles[currentStatus.key]);
         historyHtml += `<p class="text-green-400">${titleObj.symbol} Current ${titleKey.charAt(0).toUpperCase() + titleKey.slice(1)} Champion</p>`;
         modal.vacateBtn.classList.remove('hidden');
     } else {

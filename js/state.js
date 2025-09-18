@@ -23,7 +23,7 @@ export let state = {
             undisputed: { name: 'Vacant', data: null, symbol: '💎' }
         },
         local: {},
-        interUniverseChampion: { name: 'Vacant', data: null, symbol: '🌌' } 
+        interUniverseTitles: {}
     },
     currentRecordEditTarget: null,
 };
@@ -74,6 +74,17 @@ export function createNewFighter() {
 const generateUniverseId = () => {
     return `BTR-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`;
 };
+
+/**
+ * Generates a consistent key for an Inter-Universe title based on two universe IDs.
+ * @param {string} id1 Universe ID 1
+ * @param {string} id2 Universe ID 2
+ * @returns {string|null} The generated key or null if IDs are the same.
+ */
+export function getInterUniverseTitleKey(id1, id2) {
+    if (!id1 || !id2 || id1 === id2) return null;
+    return [id1, id2].sort().join('--');
+}
 
 export const updateTimestamp = (fighter) => {
     if (fighter) {
@@ -146,9 +157,21 @@ export function loadRoster(data) {
     };
     state.roster.major = Object.assign({}, defaultMajor, data.major);
     state.roster.local = data.local || {};
-    // Handle renaming for backward compatibility
-    const universalChamp = data.universalChampion || data.interUniverseChampion;
-    state.roster.interUniverseChampion = universalChamp || { name: 'Vacant', data: null, symbol: '🌌' };
+    // Handle new Inter-Universe title structure with backward compatibility
+    state.roster.interUniverseTitles = data.interUniverseTitles || {};
+    if (data.interUniverseChampion && data.interUniverseChampion.data) {
+        const champData = data.interUniverseChampion.data;
+        // This is imperfect as we don't know the opponent's universe ID from old data.
+        // We create a generic title key. This will be updated on the first defense.
+        const genericKey = getInterUniverseTitleKey(state.universeId, champData.universeId || 'unknown-universe');
+        if (genericKey && !state.roster.interUniverseTitles[genericKey]) {
+            state.roster.interUniverseTitles[genericKey] = {
+                name: data.interUniverseChampion.name,
+                data: champData,
+                symbol: '🌌'
+            };
+        }
+    }
 
 
     populateSetupPanel();
@@ -264,7 +287,7 @@ export function attachEventListeners() {
         showToast("UI Data Refreshed!", 3000);
     });
     dom.center.lowCardCheckbox.addEventListener('change', updateScoresAndDisplay);
-    dom.center.titleSelectBtn.addEventListener('click', openTitleSelectionModal);
+    dom.center.titleSelectBtn.addEventListener('click', () => openTitleSelectionModal());
     
     dom.titleSelectModal.confirmBtn.addEventListener('click', () => { 
         const selectedOption = document.querySelector('input[name="title-option"]:checked'); 
@@ -531,3 +554,4 @@ export function attachEventListeners() {
         }
     });
 }
+
