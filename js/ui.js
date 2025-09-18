@@ -46,24 +46,39 @@ export function showConfirmationModal(title, message) {
 export function showRivalPromotionModal(fighterData) {
     return new Promise(resolve => {
         const modal = dom.rivalPromotionModal;
+        
+        // Defensive check to ensure the modal and its core elements exist
+        if (!modal || !modal.modal) {
+            console.error("Rival Promotion Modal structure not found in the DOM. Check if modals.html is loaded correctly.");
+            resolve(null); // Resolve with null to prevent the app from hanging
+            return;
+        }
+
         const majorChampKeys = ['featherweight', 'cruiserweight', 'heavyweight', 'interGenre', 'undisputed'];
         const isMajorChamp = majorChampKeys.includes(fighterData.homeChampionStatus) || fighterData.homeChampionStatus === 'undisputed';
 
-        modal.fighterName.textContent = fighterData.name;
-        modal.rivalId.textContent = fighterData.universeId;
-        modal.homeId.textContent = state.universeId;
+        if(modal.fighterName) modal.fighterName.textContent = fighterData.name;
+        if(modal.rivalId) modal.rivalId.textContent = fighterData.universeId;
+        if(modal.homeId) modal.homeId.textContent = state.universeId;
         
-        if (fighterData.homeChampionStatus !== 'contender') {
-            modal.homeTitle.textContent = `(${fighterData.homeChampionStatus.charAt(0).toUpperCase() + fighterData.homeChampionStatus.slice(1)} Champion)`;
-            modal.homeTitle.classList.remove('hidden');
+        // Defensive check for the specific element causing the error
+        if (modal.homeTitle) {
+            if (fighterData.homeChampionStatus && fighterData.homeChampionStatus !== 'contender') {
+                modal.homeTitle.textContent = `(${fighterData.homeChampionStatus.charAt(0).toUpperCase() + fighterData.homeChampionStatus.slice(1)} Champion)`;
+                modal.homeTitle.parentElement.classList.remove('hidden');
+            } else {
+                modal.homeTitle.parentElement.classList.add('hidden');
+            }
         } else {
-            modal.homeTitle.classList.add('hidden');
+            console.error("Element #rival-home-title not found inside the rival promotion modal.");
         }
 
-        if (isMajorChamp) {
-            modal.visitBtn.textContent = 'Visit (Inter-Universe Title Contender!)';
-        } else {
-            modal.visitBtn.textContent = 'Visit as Contender';
+        if (modal.visitBtn) {
+            if (isMajorChamp) {
+                modal.visitBtn.textContent = 'Visit (Inter-Universe Title Contender!)';
+            } else {
+                modal.visitBtn.textContent = 'Visit as Contender';
+            }
         }
 
         modal.modal.classList.remove('hidden');
@@ -849,8 +864,54 @@ export function swapCards() {
 }
 
 function getAvailableTitleFights(fighter1, fighter2) {
-    if (!fighter1 || !fighter1.name || !fighter2 || !fighter2.name || fighter1.isRetired || fighter2.isRetired) return [];
+    if (!fighter1 || !fighter1.name || !fighter2 || !fighter2.name || fighter1.isRetired || fighter2.isRetired) {
+        return [];
+    }
 
+    const formatTitle = (key, name, symbol) => ({ key, name, symbol });
+    const majorChampKeys = ['undisputed', 'featherweight', 'cruiserweight', 'heavyweight', 'interGenre'];
+
+    const isMajorChampOrHigher = (status) => {
+        return majorChampKeys.includes(status);
+    };
+
+    // Determine if we have a visitor vs home situation
+    const isF1Visitor = fighter1.isVisitor === true;
+    const isF2Visitor = fighter2.isVisitor === true;
+
+    // --- Inter-Universe Title Logic ---
+    if (isF1Visitor !== isF2Visitor) { // Exactly one must be a visitor
+        const visitor = isF1Visitor ? fighter1 : fighter2;
+        const home = isF1Visitor ? fighter2 : fighter1;
+
+        const visitorStatus = getChampionStatus(visitor).status;
+        const homeStatus = getChampionStatus(home).status;
+
+        // Condition 1: Visitor must be a major or undisputed champion in their home universe.
+        if (!isMajorChampOrHigher(visitorStatus)) {
+            return []; // Visitor is not high-ranked enough, no titles available.
+        }
+
+        // Condition 2: Home fighter must also be a major or undisputed champion.
+        if (!isMajorChampOrHigher(homeStatus)) {
+            return []; // Home fighter is not high-ranked enough, no titles available.
+        }
+
+        // Condition 3: Home champion's title must have equal or higher prestige (lower or equal priority value).
+        if (titlePriority[homeStatus] <= titlePriority[visitorStatus]) {
+            return [formatTitle('interUniverse', `🌌 For the INTER-UNIVERSE Title! 🌌`, state.roster.interUniverseChampion.symbol)];
+        }
+        
+        // If prestige condition is not met, no titles are available.
+        return [];
+    }
+
+    // --- Home Universe Title Logic ---
+    // This part runs only if both are home fighters (or both are visitors, which is an invalid match)
+    if (isF1Visitor || isF2Visitor) {
+        return []; // No titles for visitor vs visitor matches.
+    }
+    
     const status1 = getChampionStatus(fighter1);
     const status2 = getChampionStatus(fighter2);
     const rawScore1 = calculateRawScore(fighter1);
@@ -860,33 +921,11 @@ function getAvailableTitleFights(fighter1, fighter2) {
     const fighter1Genres = fighter1.genres || [];
     const fighter2Genres = fighter2.genres || [];
     const available = [];
-    const majorChampKeys = ['featherweight', 'cruiserweight', 'heavyweight', 'interGenre'];
+    
     const f1IsMajorChamp = majorChampKeys.includes(status1.status);
     const f2IsMajorChamp = majorChampKeys.includes(status2.status);
     const f1IsLocalChamp = status1.status === 'local';
     const f2IsLocalChamp = status2.status === 'local';
-
-    const formatTitle = (key, name, symbol) => ({ key, name, symbol });
-
-    if (fighter1.isVisitor && !fighter2.isVisitor) {
-        const visitorStatus = getChampionStatus(fighter1);
-        if((visitorStatus.status === 'undisputed' || majorChampKeys.includes(visitorStatus.status))) {
-             if(status2.status ==='undisputed' || (majorChampKeys.includes(status2.status) && (titlePriority[status2.status] <= titlePriority[visitorStatus.status]))) {
-                 return [formatTitle('interUniverse', `🌌 For the INTER-UNIVERSE Title! 🌌`, state.roster.interUniverseChampion.symbol)];
-            }
-        }
-    }
-     if (fighter2.isVisitor && !fighter1.isVisitor) {
-        const visitorStatus = getChampionStatus(fighter2);
-        if(visitorStatus.status === 'undisputed' || majorChampKeys.includes(visitorStatus.status)) {
-            if(status1.status ==='undisputed' || (majorChampKeys.includes(status1.status) && (titlePriority[status1.status] <= titlePriority[visitorStatus.status]))) {
-                 return [formatTitle('interUniverse', `🌌 For the INTER-UNIVERSE Title! 🌌`, state.roster.interUniverseChampion.symbol)];
-            }
-        }
-    }
-
-
-    if (fighter1.isVisitor || fighter2.isVisitor) return [];
 
     if (state.roster.major.undisputed.name === 'Vacant') {
         if (f1IsMajorChamp && f2IsMajorChamp && status1.status !== status2.status) {

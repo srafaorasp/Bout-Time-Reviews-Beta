@@ -1,4 +1,4 @@
-import { populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, populateAndShowFighterModal, retireFighter, openGenreExpansionModal, openTop100Selection, clearForNextRound, loadCardFromData, clearCard, clearBothCards, setFighterModalState, showRivalPromotionModal, getChampionStatus } from './ui.js';
+import { populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, populateAndShowFighterModal, retireFighter, openGenreExpansionModal, openTop100Selection, clearForNextRound, loadCardFromData, clearCard, clearBothCards, setFighterModalState, showRivalPromotionModal, getChampionStatus, updateRecordDisplays } from './ui.js';
 import { fetchSteamData, updateScoresOnly, fetchAndAddSingleFighter, populateUniverseFromSteamIds } from './api.js';
 import { startFight } from './fight.js';
 import { downloadJSON, triggerFileUpload, showToast } from './utils.js';
