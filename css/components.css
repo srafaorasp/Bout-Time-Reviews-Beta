@@ -1,72 +1,25 @@
 /* This file holds styles for specific components like modals, cards, etc. */
 
-/* --- SVG Boxer Base --- */
-#fighter1-svg g, #fighter2-svg g, #header-fighter-left g, #header-fighter-right g { 
+/* --- SVG Boxer Base (Header Only) --- */
+#header-fighter-left g, #header-fighter-right g { 
     transform-box: fill-box; 
 }
 
-/* --- Ticker styles --- */
-.ticker-wrap {
-    width: 100%;
-    overflow: hidden;
-    background-color: #1a202c; /* gray-900 */
-    border-radius: 0.5rem;
-    padding: 0.75rem 0;
-    position: absolute;
-    top: 1rem;
-    left: 0;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    border-top: 2px solid #FBBF24;
-    border-bottom: 2px solid #FBBF24;
+/* --- Title Animations --- */
+@keyframes pulse-fanfare {
+  0%, 100% { text-shadow: 0 0 4px #fff, 0 0 10px #fff, 0 0 18px #fde047; color: #fde047; }
+  50% { text-shadow: 0 0 8px #fff, 0 0 16px #fde047, 0 0 30px #facc15; color: #fef08a; }
 }
-.ticker-text {
-    white-space: nowrap;
-    display: inline-block;
-    padding-left: 100%;
-    font-size: 1.125rem; /* text-lg */
-    font-weight: 700; /* font-bold */
-    color: #FBBF24; /* amber-400 */
-}
-.ticker-blink {
-    display: block;
-    width: 100%;
-    text-align: center;
-    padding-left: 0;
-}
-
-/* --- Title Display --- */
-.fighter-title-display {
-    opacity: 1;
-    transition: opacity 0.5s ease-out;
-}
-#fight-title-win-announcement {
-    position: absolute;
-    top: 40%;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #FBBF24;
-    text-shadow: 0 0 10px #FBBF24, 0 0 20px #000;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 100;
-    white-space: nowrap;
+.title-fanfare {
+    animation: pulse-fanfare 1.5s infinite;
+    font-weight: 900;
 }
 
 /* --- Misc Components --- */
 .review-dropdown {
     font-size: 0.875rem;
 }
-#fighter1-svg, #fighter2-svg {
-    transition: transform 1s ease-in-out;
-}
-.boxer-offscreen-left {
-    transform: translateX(-100px);
-}
-.boxer-offscreen-right {
-     transform: scaleX(-1) translateX(-100px);
-}
+
 .box-score-table {
     width: 100%;
     border-collapse: collapse;
@@ -86,18 +39,10 @@
     background-color: #374151; /* gray-700 */
 }
 
-/* --- Referee Styles --- */
-#referee-svg {
-    position: absolute;
-    left: 50%;
-    top: 52%;
-    transform: translate(-50%, -50%);
-    width: 8rem; /* 128px */
-    height: 8rem; /* 128px */
-    z-index: 10;
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out;
+/* --- 3D Canvas Container --- */
+#three-canvas-container canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
 }
-.ref-visible { 
-    opacity: 1 !important; 
-}
+
