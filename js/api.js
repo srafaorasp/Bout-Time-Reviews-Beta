@@ -151,6 +151,41 @@ export async function updateScoresOnly(appId, cardPrefix) {
     card.updateScoresBtn.disabled = false;
 }
 
+/**
+ * Fetches the latest data for a single fighter object and updates it in place.
+ * Does not interact with the DOM, designed for background updates.
+ * @param {object} fighter - The fighter object to refresh.
+ * @returns {Promise<boolean>} A promise that resolves to true if successful, false otherwise.
+ */
+export async function refreshFighterData(fighter) {
+    if (!fighter || !fighter.appId) return false;
+
+    const reviewsUrl = `https://store.steampowered.com/appreviews/${fighter.appId}?json=1&language=english`;
+    const detailsUrl = `https://store.steampowered.com/api/appdetails?appids=${fighter.appId}`;
+
+    const [reviewsData, detailsData] = await Promise.all([
+        fetchWithProxyRotation(reviewsUrl),
+        fetchWithProxyRotation(detailsUrl)
+    ]);
+
+    if (reviewsData && reviewsData.success && detailsData && detailsData[fighter.appId] && detailsData[fighter.appId].success) {
+        // Update the fighter object with the new data
+        fighter.steamData = reviewsData.query_summary;
+        const appDetails = detailsData[fighter.appId].data;
+        if (appDetails?.metacritic?.score) {
+            fighter.scores.metacritic = appDetails.metacritic.score.toString();
+        } else {
+            fighter.scores.metacritic = '404';
+        }
+        updateTimestamp(fighter);
+        return true;
+    } else {
+        console.warn(`Failed to refresh data for ${fighter.name} (${fighter.appId})`);
+        return false;
+    }
+}
+
+
 export async function fetchAndAddSingleFighter(appId) {
     const btn = dom.setupPanel.addFighterBtn;
     const input = dom.setupPanel.addFighterIdInput;

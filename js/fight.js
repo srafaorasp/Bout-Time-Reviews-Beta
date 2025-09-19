@@ -6,11 +6,11 @@ import { delay, calculateRawScore } from './utils.js';
 // --- CORE CALCULATION LOGIC ---
 
 export function getWeightClass(rawScore) {
-    if (rawScore === 0) return 'Unranked';
-    if (rawScore < 4.0) return 'Featherweight';
-    if (rawScore < 7.0) return 'Cruiserweight';
-    if (rawScore >= 7.0) return 'Heavyweight';
-    return 'Unranked';
+    if (rawScore < 4.0) return 'Unranked';       // Scores below 4.0 are now Unranked
+    if (rawScore < 6.0) return 'Featherweight';  // Range: 4.0 to 5.99
+    if (rawScore < 8.0) return 'Cruiserweight';  // Range: 6.0 to 7.99
+    if (rawScore >= 8.0) return 'Heavyweight';   // Range: 8.0 and above
+    return 'Unranked'; // Fallback for any edge cases
 }
 
 export function getChampionshipBonus(fighterObject) {
@@ -18,12 +18,20 @@ export function getChampionshipBonus(fighterObject) {
     const potentialBonuses = [0];
     const name = fighterObject.name;
     if (name === 'Vacant' || (fighterObject.isRetired && !fighterObject.isHallOfFamer)) return 0;
+
+    // Check new Inter-Universe Titles structure
+    if (Object.values(state.roster.interUniverseTitles).some(title => title.name === name)) {
+        potentialBonuses.push(0.04);
+    }
     
     if (name === state.roster.major.undisputed.name) potentialBonuses.push(0.03);
     if (['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].some(key => state.roster.major[key].name === name)) potentialBonuses.push(0.02);
     if (Object.keys(state.roster.local).some(key => state.roster.local[key].name === name)) potentialBonuses.push(0.01);
     
     const pastTitles = fighterObject.record.pastTitles || {};
+    if (Object.keys(pastTitles).some(key => key.startsWith('Inter-Universe Champion'))) {
+        potentialBonuses.push(0.03);
+    }
     if (pastTitles.undisputed) potentialBonuses.push(0.02);
     if (Object.keys(pastTitles).some(title => ['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].includes(title))) {
         potentialBonuses.push(0.01);
@@ -74,6 +82,7 @@ function buildBoutAnnouncement(maxRounds) {
         const titleKey = state.selectedTitleForFight;
         if (state.roster.local[titleKey]) titleName = `the ${titleKey} championship!`; 
         else if (state.roster.major[titleKey]) titleName = `the world ${titleKey.replace('interGenre','inter-genre')} championship!`; 
+        else if (titleKey.startsWith('interUniverse--')) titleName = 'the Inter-Universe Championship!';
         introText += ` and is for <span class="title-fanfare">${titleName}</span>`; 
     } 
     return [{text: introText, speech: introText, isEntranceTrigger: false}]; 
@@ -180,10 +189,13 @@ async function runTickerIntro(maxRounds, f1, f2) {
             const times = pastTitles[highestPastTitle];
             const timeText = times > 1 ? `${numberToOrdinal(times)} time former` : 'former';
             const titleName = highestPastTitle.charAt(0).toUpperCase() + highestPastTitle.slice(1).replace('Genre', '-Genre');
-            let announcement = `The ${timeText} ${titleName} Champion!`;
+            
+            let announcementFragment = `${timeText} ${titleName} Champion!`;
             if (highestPastTitle === 'undisputed') {
-                announcement = `The ${timeText} Undisputed Champion of the World!`;
+                announcementFragment = `${timeText} Undisputed Champion of the World!`;
             }
+            const prefix = hasAnyTitle ? 'And the' : 'The';
+            const announcement = `${prefix} ${announcementFragment}`;
             segments.push({text: `<span class="title-fanfare">${announcement}</span>`, speech: announcement, isEntranceTrigger: isFirstAccolade, isFlashing: true});
         }
         
@@ -240,7 +252,7 @@ export async function startFight() {
     
     if (state.selectedTitleForFight !== 'none') {
         const titleKey = state.selectedTitleForFight;
-        const titleObject = getTitleInfo(titleKey); 
+        const titleObject = getTitleInfo(titleKey); // Use the new centralized function
 
         if (titleObject && titleObject.symbol) {
             refIcon.textContent = titleObject.symbol;
@@ -273,10 +285,13 @@ export async function startFight() {
     dom.fightModal.fighter1.svg.classList.add('boxer-offscreen-left'); dom.fightModal.fighter2.svg.classList.add('boxer-offscreen-right');
     dom.fightModal.fighter1.svg.style.visibility = 'visible'; dom.fightModal.fighter2.svg.style.visibility = 'visible';
     
+    // Correctly calculate maxRounds using the robust logic.
     const isTitleMatch = state.selectedTitleForFight !== 'none';
     let maxRounds = 6;
     if (isTitleMatch && !dom.center.lowCardCheckbox.checked) {
-        if (state.selectedTitleForFight === 'undisputed') {
+        if (state.selectedTitleForFight.startsWith('interUniverse--')) {
+            maxRounds = 15;
+        } else if (state.selectedTitleForFight === 'undisputed') {
             maxRounds = 12;
         } else if (state.roster.major[state.selectedTitleForFight]) {
             maxRounds = 10;

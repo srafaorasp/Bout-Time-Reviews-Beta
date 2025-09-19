@@ -547,7 +547,7 @@ export function updateHitBonusDisplay(bonus1, bonus2) {
 
 export function getMajorChampionInfo(fighterName, isDefense = true) {
     if (!fighterName || fighterName === 'Vacant') return null;
-    const prefix = isDefense ? 'The reigning and defending' : 'The reigning';
+    const prefix = isDefense ? 'reigning and defending' : 'reigning';
     if (state.roster.major.undisputed.name === fighterName) {
         return { type: 'undisputed', speech: `${prefix} Undisputed Champion of the world!` };
     }
