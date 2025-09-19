@@ -1,4 +1,4 @@
-import { populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, populateAndShowFighterModal, retireFighter, openGenreExpansionModal, openTop100Selection, clearForNextRound, loadCardFromData, clearCard, clearBothCards, setFighterModalState, showRivalPromotionModal, getChampionStatus, updateRecordDisplays } from './ui.js';
+import { populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, populateAndShowFighterModal, retireFighter, openGenreExpansionModal, openTop100Selection, clearForNextRound, loadCardFromData, clearCard, clearBothCards, setFighterModalState, getChampionStatus, updateRecordDisplays } from './ui.js';
 import { fetchSteamData, updateScoresOnly, fetchAndAddSingleFighter, populateUniverseFromSteamIds } from './api.js';
 import { startFight } from './fight.js';
 import { downloadJSON, triggerFileUpload, showToast } from './utils.js';
@@ -22,8 +22,7 @@ export let state = {
             interGenre: { name: 'Vacant', data: null, symbol: '⭐' },
             undisputed: { name: 'Vacant', data: null, symbol: '💎' }
         },
-        local: {},
-        interUniverseTitles: {}
+        local: {}
     },
     currentRecordEditTarget: null,
 };
@@ -34,10 +33,10 @@ export const dom = {};
 // --- CONSTANTS & CONFIG ---
 const UNIVERSE_STORAGE_KEY = 'boutTimeUniverseData';
 export const GENRE_SYMBOLS = ['💥', '✨', '🔥', '💧', '🌱', '⚡️', '💨', '☀️', '🌙', '🌟', '🎲', '♟️', '🗺️', '🧭', '⚙️', '🏆', '🧩', '🎯', '🏁', '🥊', '🎶', '🎨', '📚', '🔬'];
-export const PAST_TITLE_SYMBOLS = { undisputed: '💠', major: '⚓', local: '🏵️', interUniverse: '🌠' };
+export const PAST_TITLE_SYMBOLS = { undisputed: '💠', major: '⚓', local: '🏵️' };
 export const GRAND_SLAM_SYMBOL = '⚜️';
 export const HALL_OF_FAME_SYMBOL = '🏛️';
-export const titlePriority = { interUniverse: -1, undisputed: 0, interGenre: 1, heavyweight: 1, cruiserweight: 1, featherweight: 1 };
+export const titlePriority = { undisputed: 0, interGenre: 1, heavyweight: 1, cruiserweight: 1, featherweight: 1 };
 export const punchTypes = [ "jab", "cross", "hook", "uppercut", "overhand right", "body shot", "check hook", "bolo punch", "haymaker" ];
 
 
@@ -67,24 +66,12 @@ export function createNewFighter() {
         isRetired: false,
         lastModified: new Date().toISOString(),
         universeId: state.universeId,
-        homeChampionStatus: 'contender'
     };
 }
 
 const generateUniverseId = () => {
     return `BTR-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`;
 };
-
-/**
- * Generates a consistent key for an Inter-Universe title based on two universe IDs.
- * @param {string} id1 Universe ID 1
- * @param {string} id2 Universe ID 2
- * @returns {string|null} The generated key or null if IDs are the same.
- */
-export function getInterUniverseTitleKey(id1, id2) {
-    if (!id1 || !id2 || id1 === id2) return null;
-    return [id1, id2].sort().join('--');
-}
 
 export const updateTimestamp = (fighter) => {
     if (fighter) {
@@ -157,23 +144,6 @@ export function loadRoster(data) {
     };
     state.roster.major = Object.assign({}, defaultMajor, data.major);
     state.roster.local = data.local || {};
-    // Handle new Inter-Universe title structure with backward compatibility
-    state.roster.interUniverseTitles = data.interUniverseTitles || {};
-    if (data.interUniverseChampion && data.interUniverseChampion.data) {
-        const champData = data.interUniverseChampion.data;
-        // This is imperfect as we don't know the opponent's universe ID from old data.
-        // We create a generic title key. This will be updated on the first defense.
-        const genericKey = getInterUniverseTitleKey(state.universeId, champData.universeId || 'unknown-universe');
-        if (genericKey && !state.roster.interUniverseTitles[genericKey]) {
-            state.roster.interUniverseTitles[genericKey] = {
-                name: data.interUniverseChampion.name,
-                data: champData,
-                symbol: '🌌'
-            };
-        }
-    }
-
-
     populateSetupPanel();
     updateChampionsDisplay();
     updateScoresAndDisplay();
@@ -246,7 +216,6 @@ function selectDOMElements() {
         titleSelectModal: { modal: document.getElementById('title-select-modal'), optionsContainer: document.getElementById('title-options-container'), confirmBtn: document.getElementById('confirm-title-select-btn'), cancelBtn: document.getElementById('cancel-title-select-btn'), },
         helpModal: { modal: document.getElementById('help-modal'), closeBtn: document.getElementById('close-help-btn'), closeBtnBottom: document.getElementById('close-help-btn-bottom') },
         universeSetupModal: { modal: document.getElementById('universe-setup-modal'), idsInput: document.getElementById('steam-ids-input'), singleIdInput: document.getElementById('single-steam-id-input'), addSingleIdBtn: document.getElementById('add-single-steam-id-btn'), error: document.getElementById('universe-setup-error'), startBtn: document.getElementById('start-universe-btn'), importBtn: document.getElementById('import-universe-btn'), loadPresetBtn: document.getElementById('load-preset-universe-btn'), selectTop100Btn: document.getElementById('select-top-100-btn') },
-        rivalPromotionModal: { modal: document.getElementById('rival-promotion-modal'), fighterName: document.getElementById('rival-fighter-name'), homeTitle: document.getElementById('rival-home-title'), rivalId: document.getElementById('rival-universe-id'), homeId: document.getElementById('home-universe-id'), visitBtn: document.getElementById('visit-universe-btn'), joinBtn: document.getElementById('join-universe-btn') },
         top100Modal: { modal: document.getElementById('top-100-modal'), list: document.getElementById('top-100-list'), search: document.getElementById('top-100-search'), clearBtn: document.getElementById('top-100-clear-selection-btn'), status: document.getElementById('top-100-status'), cancelBtn: document.getElementById('cancel-top-100-btn'), confirmBtn: document.getElementById('confirm-top-100-btn') },
         genreExpansionModal: { modal: document.getElementById('genre-expansion-modal'), title: document.getElementById('genre-expansion-title'), list: document.getElementById('genre-expansion-list'), status: document.getElementById('genre-expansion-status'), cancelBtn: document.getElementById('cancel-genre-expansion-btn'), confirmBtn: document.getElementById('confirm-genre-expansion-btn') },
         toast: { container: document.getElementById('toast-notification'), message: document.getElementById('toast-message') },
@@ -324,22 +293,12 @@ export function attachEventListeners() {
     dom.setupPanel.exportBtn.addEventListener('click', () => downloadJSON({ universeId: state.universeId, roster: state.roster, universeFighters: state.universeFighters }, 'bout_time_universe.btr'));
     
     const handleImport = (cardPrefix) => {
-        triggerFileUpload(async (data) => {
-            if (data.universeId && data.universeId !== state.universeId) {
-                const decision = await showRivalPromotionModal(data);
-                if (decision === 'visit') {
-                    data.isVisitor = true;
-                    loadCardFromData(cardPrefix, data);
-                } else if (decision === 'join') {
-                    data.isVisitor = false;
-                    data.universeId = state.universeId;
-                    data.homeChampionStatus = 'contender';
-                    loadCardFromData(cardPrefix, data);
-                    addFighterToUniverse(data);
-                }
-            } else {
-                loadCardFromData(cardPrefix, data);
-            }
+        triggerFileUpload((data) => {
+            // Simplified logic: always treat imported fighters as part of the current universe.
+            data.isVisitor = false;
+            data.universeId = state.universeId;
+            loadCardFromData(cardPrefix, data);
+            addFighterToUniverse(data); // Add them to the universe if not already there
             updateScoresAndDisplay();
         }, '.btr');
     };
@@ -554,4 +513,3 @@ export function attachEventListeners() {
         }
     });
 }
-
