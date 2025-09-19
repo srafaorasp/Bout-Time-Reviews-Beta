@@ -22,6 +22,7 @@ export function init(container, ui) {
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
+    container.innerHTML = ''; // Clear container before appending
     container.appendChild(renderer.domElement);
     
     // Store UI elements
@@ -121,7 +122,7 @@ function createFighterModel(color, position) {
     torso.castShadow = true;
     group.add(torso);
 
-    const createGlove = () => new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshStandardMaterial({ color: 0 B22222 }));
+    const createGlove = () => new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), new THREE.MeshStandardMaterial({ color: 0xB22222 }));
 
     const leftArm = new THREE.Group();
     const rightArm = new THREE.Group();
@@ -248,3 +249,4 @@ export function setRoundDisplay(text) {
         uiElements.roundCounter.textContent = text;
     }
 }
+
