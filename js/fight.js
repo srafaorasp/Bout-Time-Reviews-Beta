@@ -1,5 +1,5 @@
 import { state, dom, punchTypes } from './state.js';
-import { displayFightWinner, logFightMessage, updateFightUI, displayInitialFighterTitles, animateTitleBout, updateHitBonusDisplay, getMajorChampionInfo, getLocalChampionInfo, hasAchievedGrandSlam } from './ui.js';
+import { displayFightWinner, logFightMessage, updateFightUI, displayInitialFighterTitles, animateTitleBout, updateHitBonusDisplay, getMajorChampionInfo, getLocalChampionInfo, hasAchievedGrandSlam, getTitleInfo } from './ui.js';
 import { playBellSequence, playSound, speak } from './sound.js';
 import { delay, calculateRawScore } from './utils.js';
 
@@ -249,9 +249,8 @@ export async function startFight() {
     
     if (state.selectedTitleForFight !== 'none') {
         const titleKey = state.selectedTitleForFight;
-        const titleObject = titleKey.startsWith('interUniverse--')
-            ? state.roster.interUniverseTitles[titleKey]
-            : (state.roster.major[titleKey] || state.roster.local[titleKey]);
+        const titleObject = getTitleInfo(titleKey); // Use the new centralized function
+
         if (titleObject && titleObject.symbol) {
             refIcon.textContent = titleObject.symbol;
             refIcon.style.display = 'block';
@@ -282,7 +281,21 @@ export async function startFight() {
     displayInitialFighterTitles();
     dom.fightModal.fighter1.svg.classList.add('boxer-offscreen-left'); dom.fightModal.fighter2.svg.classList.add('boxer-offscreen-right');
     dom.fightModal.fighter1.svg.style.visibility = 'visible'; dom.fightModal.fighter2.svg.style.visibility = 'visible';
-    let maxRounds = (dom.center.lowCardCheckbox.checked || state.selectedTitleForFight === 'none') ? 6 : (state.selectedTitleForFight.startsWith('interUniverse--') ? 15 : (state.selectedTitleForFight === 'undisputed' ? 12 : (state.roster.major[state.selectedTitleForFight] ? 10 : 8)));
+    
+    // Correctly calculate maxRounds using the robust logic.
+    const isTitleMatch = state.selectedTitleForFight !== 'none';
+    let maxRounds = 6;
+    if (isTitleMatch && !dom.center.lowCardCheckbox.checked) {
+        if (state.selectedTitleForFight.startsWith('interUniverse--')) {
+            maxRounds = 15;
+        } else if (state.selectedTitleForFight === 'undisputed') {
+            maxRounds = 12;
+        } else if (state.roster.major[state.selectedTitleForFight]) {
+            maxRounds = 10;
+        } else if (state.roster.local[state.selectedTitleForFight]) {
+            maxRounds = 8;
+        }
+    }
     
     const rawScore1 = calculateRawScore(state.fighter1), rawScore2 = calculateRawScore(state.fighter2); 
     let finalRound = 0, fightWinnerName = null, winType = null;
