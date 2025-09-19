@@ -18,20 +18,12 @@ export function getChampionshipBonus(fighterObject) {
     const potentialBonuses = [0];
     const name = fighterObject.name;
     if (name === 'Vacant' || (fighterObject.isRetired && !fighterObject.isHallOfFamer)) return 0;
-
-    // Check new Inter-Universe Titles structure
-    if (Object.values(state.roster.interUniverseTitles).some(title => title.name === name)) {
-        potentialBonuses.push(0.04);
-    }
     
     if (name === state.roster.major.undisputed.name) potentialBonuses.push(0.03);
     if (['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].some(key => state.roster.major[key].name === name)) potentialBonuses.push(0.02);
     if (Object.keys(state.roster.local).some(key => state.roster.local[key].name === name)) potentialBonuses.push(0.01);
     
     const pastTitles = fighterObject.record.pastTitles || {};
-    if (Object.keys(pastTitles).some(key => key.startsWith('Inter-Universe Champion'))) {
-        potentialBonuses.push(0.03);
-    }
     if (pastTitles.undisputed) potentialBonuses.push(0.02);
     if (Object.keys(pastTitles).some(title => ['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].includes(title))) {
         potentialBonuses.push(0.01);
@@ -82,7 +74,6 @@ function buildBoutAnnouncement(maxRounds) {
         const titleKey = state.selectedTitleForFight;
         if (state.roster.local[titleKey]) titleName = `the ${titleKey} championship!`; 
         else if (state.roster.major[titleKey]) titleName = `the world ${titleKey.replace('interGenre','inter-genre')} championship!`; 
-        else if (titleKey.startsWith('interUniverse--')) titleName = 'the Inter-Universe Championship!';
         introText += ` and is for <span class="title-fanfare">${titleName}</span>`; 
     } 
     return [{text: introText, speech: introText, isEntranceTrigger: false}]; 
@@ -289,9 +280,7 @@ export async function startFight() {
     const isTitleMatch = state.selectedTitleForFight !== 'none';
     let maxRounds = 6;
     if (isTitleMatch && !dom.center.lowCardCheckbox.checked) {
-        if (state.selectedTitleForFight.startsWith('interUniverse--')) {
-            maxRounds = 15;
-        } else if (state.selectedTitleForFight === 'undisputed') {
+        if (state.selectedTitleForFight === 'undisputed') {
             maxRounds = 12;
         } else if (state.roster.major[state.selectedTitleForFight]) {
             maxRounds = 10;
