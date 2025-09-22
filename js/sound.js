@@ -89,18 +89,3 @@ export function playSound(type, options = {}) {
     }
 }
 
-export function speak(text, isTitleAnnouncement = false) {
-    if (dom.center.enableAnnouncerCheckbox.checked && 'speechSynthesis' in window) {
-        speechSynthesis.cancel();
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = text;
-        const cleanText = tempDiv.textContent || tempDiv.innerText || "";
-        const utterance = new SpeechSynthesisUtterance(cleanText);
-        if (isTitleAnnouncement) {
-            utterance.pitch = 1.4;
-            utterance.rate = 0.9;
-            utterance.volume = 1.0;
-        }
-        speechSynthesis.speak(utterance);
-    }
-}

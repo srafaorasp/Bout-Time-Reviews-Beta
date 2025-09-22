@@ -1,4 +1,4 @@
-// This file is for general helper and utility functions.
+import { state } from './state.js';
 
 /**
  * Creates a delay for a specified number of milliseconds.
@@ -101,3 +101,33 @@ export function calculateRawScore(fighterObject) {
     return weightCount > 0 ? totalScore / weightCount : 0;
 }
 
+export function getWeightClass(rawScore) {
+    if (rawScore < 4.0) return 'Unranked';
+    if (rawScore < 6.0) return 'Featherweight';
+    if (rawScore < 8.0) return 'Cruiserweight';
+    if (rawScore >= 8.0) return 'Heavyweight';
+    return 'Unranked';
+}
+
+export function getChampionshipBonus(fighterObject) {
+    if (!fighterObject || !fighterObject.name) return 0;
+    const potentialBonuses = [0];
+    const name = fighterObject.name;
+    if (name === 'Vacant' || (fighterObject.isRetired && !fighterObject.isHallOfFamer)) return 0;
+    
+    if (name === state.roster.major.undisputed.name) potentialBonuses.push(0.03);
+    if (['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].some(key => state.roster.major[key].name === name)) potentialBonuses.push(0.02);
+    if (Object.keys(state.roster.local).some(key => state.roster.local[key].name === name)) potentialBonuses.push(0.01);
+    
+    const pastTitles = fighterObject.record.pastTitles || {};
+    if (pastTitles.undisputed) potentialBonuses.push(0.02);
+    if (Object.keys(pastTitles).some(title => ['heavyweight', 'interGenre', 'cruiserweight', 'featherweight'].includes(title))) {
+        potentialBonuses.push(0.01);
+    }
+    return Math.max(...potentialBonuses);
+}
+
+export function applyBonuses(rawScore, fighterObject) {
+    if (!fighterObject) return 0;
+    return rawScore * (1 + getChampionshipBonus(fighterObject));
+}

@@ -1,4 +1,4 @@
-import { populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, masterReset, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, populateAndShowFighterModal, retireFighter, openGenreExpansionModal, openTop100Selection, clearForNextRound, loadCardFromData, clearCard, clearBothCards, setFighterModalState, showRivalPromotionModal, getChampionStatus, updateRecordDisplays } from './ui.js';
+import { populateSetupPanel, updateChampionsDisplay, updateScoresAndDisplay, populateUniverseSelectors, swapCards, openTitleSelectionModal, applyRosterChanges, handleLoadMatchClick, populateAndShowFighterModal, retireFighter, openGenreExpansionModal, openTop100Selection, clearForNextRound, loadCardFromData, clearCard, clearBothCards, setFighterModalState, showConfirmationModal } from './ui.js';
 import { fetchSteamData, updateScoresOnly, fetchAndAddSingleFighter, populateUniverseFromSteamIds } from './api.js';
 import { startFight } from './fight.js';
 import { downloadJSON, triggerFileUpload, showToast } from './utils.js';
@@ -22,10 +22,10 @@ export let state = {
             interGenre: { name: 'Vacant', data: null, symbol: '⭐' },
             undisputed: { name: 'Vacant', data: null, symbol: '💎' }
         },
-        local: {},
-        interUniverseTitles: {}
+        local: {}
     },
     currentRecordEditTarget: null,
+    punchTypes: [ "jab", "cross", "hook", "uppercut", "overhand right", "body shot", "check hook", "bolo punch", "haymaker" ]
 };
 
 // --- DOM ELEMENT SELECTION (centralized) ---
@@ -34,11 +34,10 @@ export const dom = {};
 // --- CONSTANTS & CONFIG ---
 const UNIVERSE_STORAGE_KEY = 'boutTimeUniverseData';
 export const GENRE_SYMBOLS = ['💥', '✨', '🔥', '💧', '🌱', '⚡️', '💨', '☀️', '🌙', '🌟', '🎲', '♟️', '🗺️', '🧭', '⚙️', '🏆', '🧩', '🎯', '🏁', '🥊', '🎶', '🎨', '📚', '🔬'];
-export const PAST_TITLE_SYMBOLS = { undisputed: '💠', major: '⚓', local: '🏵️', interUniverse: '🌠' };
+export const PAST_TITLE_SYMBOLS = { undisputed: '💠', major: '⚓', local: '🏵️' };
 export const GRAND_SLAM_SYMBOL = '⚜️';
 export const HALL_OF_FAME_SYMBOL = '🏛️';
-export const titlePriority = { interUniverse: -1, undisputed: 0, interGenre: 1, heavyweight: 1, cruiserweight: 1, featherweight: 1 };
-export const punchTypes = [ "jab", "cross", "hook", "uppercut", "overhand right", "body shot", "check hook", "bolo punch", "haymaker" ];
+export const titlePriority = { undisputed: 0, interGenre: 1, heavyweight: 1, cruiserweight: 1, featherweight: 1 };
 
 
 // --- INITIALIZATION ---
@@ -66,25 +65,13 @@ export function createNewFighter() {
         isHallOfFamer: false,
         isRetired: false,
         lastModified: new Date().toISOString(),
-        universeId: state.universeId,
-        homeChampionStatus: 'contender'
+        universeId: state.universeId
     };
 }
 
 const generateUniverseId = () => {
     return `BTR-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 5)}`;
 };
-
-/**
- * Generates a consistent key for an Inter-Universe title based on two universe IDs.
- * @param {string} id1 Universe ID 1
- * @param {string} id2 Universe ID 2
- * @returns {string|null} The generated key or null if IDs are the same.
- */
-export function getInterUniverseTitleKey(id1, id2) {
-    if (!id1 || !id2 || id1 === id2) return null;
-    return `interUniverse--${[id1, id2].sort().join('--')}`;
-}
 
 export const updateTimestamp = (fighter) => {
     if (fighter) {
@@ -161,22 +148,6 @@ export function loadRoster(data) {
     };
     state.roster.major = Object.assign({}, defaultMajor, data.major);
     state.roster.local = data.local || {};
-    // Handle new Inter-Universe title structure with backward compatibility
-    state.roster.interUniverseTitles = data.interUniverseTitles || {};
-    if (data.interUniverseChampion && data.interUniverseChampion.data) {
-        const champData = data.interUniverseChampion.data;
-        // This is imperfect as we don't know the opponent's universe ID from old data.
-        // We create a generic title key. This will be updated on the first defense.
-        const genericKey = getInterUniverseTitleKey(state.universeId, champData.universeId || 'unknown-universe');
-        if (genericKey && !state.roster.interUniverseTitles[genericKey]) {
-            state.roster.interUniverseTitles[genericKey] = {
-                name: data.interUniverseChampion.name,
-                data: champData,
-                symbol: '🌌'
-            };
-        }
-    }
-
 
     populateSetupPanel();
     updateChampionsDisplay();
@@ -269,6 +240,15 @@ export function addFighterToUniverse(fighterData) {
     }
 }
 
+export function masterReset() {
+    showConfirmationModal("Reset Universe?", "This will delete all fighters, champions, and history. This action cannot be undone.")
+        .then(confirmed => {
+            if (confirmed) {
+                localStorage.removeItem(UNIVERSE_STORAGE_KEY);
+                location.reload();
+            }
+        });
+}
 
 // --- DOM Selection and Event Listeners ---
 function selectDOMElements() {
@@ -278,33 +258,13 @@ function selectDOMElements() {
             item1: { card: document.getElementById('item1-card'), name: document.getElementById('item1-name'), symbol: document.getElementById('item1-symbol'), record: document.getElementById('item1-record'), weightClass: document.getElementById('item1-weight-class'), steamId: document.getElementById('item1-steam-id'), fetchSteamBtn: document.getElementById('item1-fetch-steam-btn'), steamError: document.getElementById('item1-steam-error'), steamScoreDisplay: document.getElementById('item1-steam-score-display'), metacritic: document.getElementById('item1-metacritic'), metacriticError: document.getElementById('item1-metacritic-error'), devHouse: document.getElementById('item1-dev-house'), publisher: document.getElementById('item1-publisher'), editRecordBtn: document.getElementById('item1-edit-record-btn'), importBtn: document.getElementById('item1-import-btn'), exportBtn: document.getElementById('item1-export-btn'), updateScoresBtn: document.getElementById('item1-update-scores-btn'), statusMessage: document.getElementById('item1-status-message'), universeSelect: document.getElementById('item1-universe-select') },
             item2: { card: document.getElementById('item2-card'), name: document.getElementById('item2-name'), symbol: document.getElementById('item2-symbol'), record: document.getElementById('item2-record'), weightClass: document.getElementById('item2-weight-class'), steamId: document.getElementById('item2-steam-id'), fetchSteamBtn: document.getElementById('item2-fetch-steam-btn'), steamError: document.getElementById('item2-steam-error'), steamScoreDisplay: document.getElementById('item2-steam-score-display'), metacritic: document.getElementById('item2-metacritic'), metacriticError: document.getElementById('item2-metacritic-error'), devHouse: document.getElementById('item2-dev-house'), publisher: document.getElementById('item2-publisher'), editRecordBtn: document.getElementById('item2-edit-record-btn'), importBtn: document.getElementById('item2-import-btn'), exportBtn: document.getElementById('item2-export-btn'), updateScoresBtn: document.getElementById('item2-update-scores-btn'), statusMessage: document.getElementById('item2-status-message'), universeSelect: document.getElementById('item2-universe-select') }
         },
-        center: { openRosterBtn: document.getElementById('open-roster-btn'), interUniverseChampDisplay: document.getElementById('inter-universe-champ-display'), interUniverseChamp: document.getElementById('inter-universe-champ'), featherweightChamp: document.getElementById('featherweight-champ'), cruiserweightChamp: document.getElementById('cruiserweight-champ'), heavyweightChamp: document.getElementById('heavyweight-champ'), interGenreChamp: document.getElementById('intergenre-champ'), undisputedChamp: document.getElementById('undisputed-champ'), finalLabel1: document.getElementById('item1-final-label'), titleDisplay1: document.getElementById('item1-title-display'), finalScore1: document.getElementById('item1-final-score'), rawScoreDisplay1: document.getElementById('item1-raw-score-display'), vsRecord1: document.getElementById('item1-vs-record'), finalLabel2: document.getElementById('item2-final-label'), titleDisplay2: document.getElementById('item2-title-display'), finalScore2: document.getElementById('item2-final-score'), rawScoreDisplay2: document.getElementById('item2-raw-score-display'), vsRecord2: document.getElementById('item2-vs-record'), roundsDisplay: document.getElementById('rounds-display'), oddsArrowLeft: document.getElementById('odds-arrow-left'), oddsText: document.getElementById('odds-text'), oddsArrowRight: document.getElementById('odds-arrow-right'), titleSelectBtn: document.getElementById('title-select-btn'), titleMatchAnnouncement: document.getElementById('title-match-announcement'), commonGenresContainer: document.getElementById('common-genres-container'), commonGenresDisplay: document.getElementById('common-genres-display'), winnerBox: { indicator: document.getElementById('test-indicator'), title: document.getElementById('winner-title'), text: document.getElementById('winnerText'), }, fightBtn: document.getElementById('fight-btn'), swapBtn: document.getElementById('swap-btn'), lowCardCheckbox: document.getElementById('low-card-checkbox'), skipTickerCheckbox: document.getElementById('skip-ticker-checkbox'), enableAnnouncerCheckbox: document.getElementById('enable-announcer-checkbox'), nextRoundBtn: document.getElementById('next-round-btn'), nextRoundClearBtn: document.getElementById('next-round-clear-btn'), },
-        fightModal: { 
-            modal: document.getElementById('fight-modal'), 
-            canvasContainer: document.getElementById('three-canvas-container'),
-            returnBtn: document.getElementById('three-return-to-main-btn'),
-            disableDelayCheckbox: document.getElementById('three-disable-delay-checkbox'),
-            roundCounter: document.getElementById('three-round-counter'),
-            log: document.getElementById('three-fight-log'),
-            fighter1: { 
-                name: document.getElementById('three-fighter1-name'), 
-                healthBar: document.getElementById('three-health-bar-1'),
-                healthText: document.getElementById('three-health-text-1'),
-                staminaBar: document.getElementById('three-stamina-bar-1'),
-            },
-            fighter2: { 
-                name: document.getElementById('three-fighter2-name'),
-                healthBar: document.getElementById('three-health-bar-2'),
-                healthText: document.getElementById('three-health-text-2'),
-                staminaBar: document.getElementById('three-stamina-bar-2'),
-            },
-        },
+        center: { openRosterBtn: document.getElementById('open-roster-btn'), featherweightChamp: document.getElementById('featherweight-champ'), cruiserweightChamp: document.getElementById('cruiserweight-champ'), heavyweightChamp: document.getElementById('heavyweight-champ'), interGenreChamp: document.getElementById('intergenre-champ'), undisputedChamp: document.getElementById('undisputed-champ'), finalLabel1: document.getElementById('item1-final-label'), titleDisplay1: document.getElementById('item1-title-display'), finalScore1: document.getElementById('item1-final-score'), rawScoreDisplay1: document.getElementById('item1-raw-score-display'), vsRecord1: document.getElementById('item1-vs-record'), finalLabel2: document.getElementById('item2-final-label'), titleDisplay2: document.getElementById('item2-title-display'), finalScore2: document.getElementById('item2-final-score'), rawScoreDisplay2: document.getElementById('item2-raw-score-display'), vsRecord2: document.getElementById('item2-vs-record'), roundsDisplay: document.getElementById('rounds-display'), oddsArrowLeft: document.getElementById('odds-arrow-left'), oddsText: document.getElementById('odds-text'), oddsArrowRight: document.getElementById('odds-arrow-right'), titleSelectBtn: document.getElementById('title-select-btn'), titleMatchAnnouncement: document.getElementById('title-match-announcement'), commonGenresContainer: document.getElementById('common-genres-container'), commonGenresDisplay: document.getElementById('common-genres-display'), winnerBox: { indicator: document.getElementById('test-indicator'), title: document.getElementById('winner-title'), text: document.getElementById('winnerText'), }, fightBtn: document.getElementById('fight-btn'), swapBtn: document.getElementById('swap-btn'), lowCardCheckbox: document.getElementById('low-card-checkbox'), skipTickerCheckbox: document.getElementById('skip-ticker-checkbox'), enableAnnouncerCheckbox: document.getElementById('enable-announcer-checkbox'), nextRoundBtn: document.getElementById('next-round-btn'), nextRoundClearBtn: document.getElementById('next-round-clear-btn'), },
+        fightModal: { modal: document.getElementById('fight-modal-3d'), canvasContainer: document.getElementById('three-canvas-container'), fighter1Name: document.getElementById('fighter1-name-3d'), fighter2Name: document.getElementById('fighter2-name-3d'), healthBar1: document.getElementById('health-bar-1-3d'), healthBar2: document.getElementById('health-bar-2-3d'), staminaBar1: document.getElementById('stamina-bar-1-3d'), staminaBar2: document.getElementById('stamina-bar-2-3d'), roundCounter: document.getElementById('fight-round-counter-3d'), turnCounter: document.getElementById('fight-turn-counter-3d'), log: document.getElementById('fight-log-3d'), returnBtn: document.getElementById('return-to-main-btn-3d') },
         setupPanel: { panel: document.getElementById('setup-panel'), universeIdDisplay: document.getElementById('universe-id-display'), rosterStatus: document.getElementById('roster-status'), closeBtn: document.getElementById('close-setup-btn'), championList: document.getElementById('champion-list'), localChampionList: document.getElementById('local-champion-list'), universeFighterList: document.getElementById('universe-fighter-list'), applyBtn: document.getElementById('apply-roster-changes-btn'), addFighterIdInput: document.getElementById('add-fighter-steam-id'), addFighterBtn: document.getElementById('add-fighter-btn'), exportBtn: document.getElementById('export-roster-btn'), potentialMatchupsList: document.getElementById('potential-matchups-list'), potentialTitlesList: document.getElementById('potential-titles-list'), retirementSelect: document.getElementById('retirement-fighter-select'), retireForgottenBtn: document.getElementById('retire-forgotten-btn'), retireHofBtn: document.getElementById('retire-hof-btn'), hallOfFameList: document.getElementById('hall-of-fame-list'), untappedGenresList: document.getElementById('untapped-genres-list'), tappedGenresList: document.getElementById('tapped-genres-list') },
         fighterInfoModal: { modal: document.getElementById('fighter-info-modal'), name: document.getElementById('info-modal-name'), universeId: document.getElementById('info-modal-universe-id'), recordView: document.getElementById('info-modal-record-view'), weightClassView: document.getElementById('info-modal-weight-class-view'), devView: document.getElementById('info-modal-dev-view'), publisherView: document.getElementById('info-modal-publisher-view'), genresView: document.getElementById('info-modal-genres-view'), titleHistoryView: document.getElementById('info-modal-title-history'), viewState: document.getElementById('info-modal-view-state'), editState: document.getElementById('info-modal-edit-state'), tkoInput: document.getElementById('record-tko'), koInput: document.getElementById('record-ko'), lossesInput: document.getElementById('record-losses'), titleHistoryEdit: document.getElementById('info-modal-title-history-edit'), closeBtn: document.getElementById('info-modal-close-btn'), editBtn: document.getElementById('info-modal-edit-btn'), saveBtn: document.getElementById('info-modal-save-btn'), cancelBtn: document.getElementById('info-modal-cancel-btn'), vacateBtn: document.getElementById('info-modal-vacate-btn') },
         titleSelectModal: { modal: document.getElementById('title-select-modal'), optionsContainer: document.getElementById('title-options-container'), confirmBtn: document.getElementById('confirm-title-select-btn'), cancelBtn: document.getElementById('cancel-title-select-btn'), },
         helpModal: { modal: document.getElementById('help-modal'), closeBtn: document.getElementById('close-help-btn'), closeBtnBottom: document.getElementById('close-help-btn-bottom') },
         universeSetupModal: { modal: document.getElementById('universe-setup-modal'), idsInput: document.getElementById('steam-ids-input'), singleIdInput: document.getElementById('single-steam-id-input'), addSingleIdBtn: document.getElementById('add-single-steam-id-btn'), error: document.getElementById('universe-setup-error'), startBtn: document.getElementById('start-universe-btn'), importBtn: document.getElementById('import-universe-btn'), loadPresetBtn: document.getElementById('load-preset-universe-btn'), selectTop100Btn: document.getElementById('select-top-100-btn') },
-        rivalPromotionModal: { modal: document.getElementById('rival-promotion-modal'), fighterName: document.getElementById('rival-fighter-name'), homeTitle: document.getElementById('rival-home-title'), rivalId: document.getElementById('rival-universe-id'), homeId: document.getElementById('home-universe-id'), visitBtn: document.getElementById('visit-universe-btn'), joinBtn: document.getElementById('join-universe-btn') },
         top100Modal: { modal: document.getElementById('top-100-modal'), list: document.getElementById('top-100-list'), search: document.getElementById('top-100-search'), clearBtn: document.getElementById('top-100-clear-selection-btn'), status: document.getElementById('top-100-status'), cancelBtn: document.getElementById('cancel-top-100-btn'), confirmBtn: document.getElementById('confirm-top-100-btn') },
         genreExpansionModal: { modal: document.getElementById('genre-expansion-modal'), title: document.getElementById('genre-expansion-title'), list: document.getElementById('genre-expansion-list'), status: document.getElementById('genre-expansion-status'), cancelBtn: document.getElementById('cancel-genre-expansion-btn'), confirmBtn: document.getElementById('confirm-genre-expansion-btn') },
         toast: { container: document.getElementById('toast-notification'), message: document.getElementById('toast-message') },
@@ -349,13 +309,17 @@ export function attachEventListeners() {
     
     dom.titleSelectModal.confirmBtn.addEventListener('click', () => { 
         const selectedOption = document.querySelector('input[name="title-option"]:checked'); 
-        if (selectedOption) setSelectedTitle(selectedOption.value);
-        updateScoresAndDisplay(); 
+        if (selectedOption) {
+            setSelectedTitle(selectedOption.value);
+            updateScoresAndDisplay(); // Force UI update after selection
+        }
         dom.titleSelectModal.modal.classList.add('hidden'); 
     });
 
-    dom.fightModal.returnBtn.addEventListener('click', () => dom.fightModal.modal.classList.add('hidden')); 
-    // dom.fightModal.skipIntroBtn.addEventListener('click', () => { state.fightCancellationToken.cancelled = true; if('speechSynthesis' in window) speechSynthesis.cancel(); });
+    if (dom.fightModal && dom.fightModal.returnBtn) {
+        dom.fightModal.returnBtn.addEventListener('click', () => dom.fightModal.modal.classList.add('hidden'));
+    }
+    
     dom.titleSelectModal.cancelBtn.addEventListener('click', () => dom.titleSelectModal.modal.classList.add('hidden'));
     
     dom.triggers.setup.addEventListener('click', () => { populateSetupPanel(); dom.setupPanel.panel.classList.remove('hidden') });
@@ -367,37 +331,20 @@ export function attachEventListeners() {
     
     dom.cards.item1.exportBtn.addEventListener('click', () => { 
         if(state.fighter1.appId) {
-            const fighterToExport = JSON.parse(JSON.stringify(state.fighter1));
-            fighterToExport.homeChampionStatus = getChampionStatus(fighterToExport).status;
-            downloadJSON(fighterToExport, `${fighterToExport.name || 'fighter_1'}.btr`);
+            downloadJSON(state.fighter1, `${state.fighter1.name || 'fighter_1'}.btr`);
         }
     });
     dom.cards.item2.exportBtn.addEventListener('click', () => { 
         if(state.fighter2.appId) {
-            const fighterToExport = JSON.parse(JSON.stringify(state.fighter2));
-            fighterToExport.homeChampionStatus = getChampionStatus(fighterToExport).status;
-            downloadJSON(fighterToExport, `${fighterToExport.name || 'fighter_2'}.btr`);
+            downloadJSON(state.fighter2, `${state.fighter2.name || 'fighter_2'}.btr`);
         }
     });
     dom.setupPanel.exportBtn.addEventListener('click', () => downloadJSON({ universeId: state.universeId, roster: state.roster, universeFighters: state.universeFighters }, 'bout_time_universe.btr'));
     
     const handleImport = (cardPrefix) => {
-        triggerFileUpload(async (data) => {
-            if (data.universeId && data.universeId !== state.universeId) {
-                const decision = await showRivalPromotionModal(data);
-                if (decision === 'visit') {
-                    data.isVisitor = true;
-                    loadCardFromData(cardPrefix, data);
-                } else if (decision === 'join') {
-                    data.isVisitor = false;
-                    data.universeId = state.universeId;
-                    data.homeChampionStatus = 'contender';
-                    loadCardFromData(cardPrefix, data);
-                    addFighterToUniverse(data);
-                }
-            } else {
-                loadCardFromData(cardPrefix, data);
-            }
+        triggerFileUpload((data) => {
+            loadCardFromData(cardPrefix, data);
+            addFighterToUniverse(data);
             updateScoresAndDisplay();
         }, '.btr');
     };
@@ -600,7 +547,7 @@ export function attachEventListeners() {
             const currentTitle = infoSpan.title;
             const currentText = infoSpan.textContent;
             infoSpan.title = currentText;
-            infoSpan.textContent = currentTitle;
+            infoSpan.textContent = currentText;
         } else if (event.target.closest('.universe-fighter-entry')) {
             const fighterEntry = event.target.closest('.universe-fighter-entry');
             if (event.target.closest('button')) return; 
